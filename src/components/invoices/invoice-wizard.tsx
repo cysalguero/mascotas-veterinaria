@@ -158,9 +158,13 @@ export function InvoiceWizard() {
 
             // --- VALIDACIÓN DE MES ACTUAL ---
             // --- VALIDACIÓN DE MES ACTUAL ---
-            const invoiceDate = new Date(header.fecha_venta_iso + 'T12:00:00')
+            // --- VALIDACIÓN DE MES ACTUAL (ROBUSTA) ---
+            const [invYear, invMonth] = header.fecha_venta_iso.split('-').map(Number)
             const now = new Date()
-            const isCurrentMonth = invoiceDate.getMonth() === now.getMonth() && invoiceDate.getFullYear() === now.getFullYear()
+            const currentYear = now.getFullYear()
+            const currentMonth = now.getMonth() + 1 // getMonth() es 0-index
+
+            const isCurrentMonth = invYear === currentYear && invMonth === currentMonth
 
             // Lógica de validación de fechas
             let finalAccountingDate = header.fecha_venta_iso
@@ -176,7 +180,7 @@ export function InvoiceWizard() {
             } else {
                 // Si es doctor, restringir estrictamente al mes actual
                 if (!isCurrentMonth) {
-                    throw new Error("⚠️ No se puede guardar tu factura porque es de un mes anterior o posterior. Solo puedes registrar facturas del mes actual. Contacta a un administrador.")
+                    throw new Error(`⚠️ No se puede guardar. La factura es de ${invMonth}/${invYear} y estamos en ${currentMonth}/${currentYear}. Solo puedes registrar facturas del mes actual.`)
                 }
             }
             // --------------------------------
