@@ -120,8 +120,8 @@ export default function MetricsPage() {
             let query = supabase
                 .from('invoices')
                 .select('*, invoice_items(*, categories(name))')
-                .gte('fecha_venta', format(start, 'yyyy-MM-dd'))
-                .lte('fecha_venta', format(end, 'yyyy-MM-dd'))
+                .gte('fecha_contable', format(start, 'yyyy-MM-dd'))
+                .lte('fecha_contable', format(end, 'yyyy-MM-dd'))
 
             if (role === 'doctor') {
                 query = query.eq('doctor_id', user.id)
@@ -160,7 +160,7 @@ export default function MetricsPage() {
                         totalIncome += itemTotal
 
                         // Trend should follow commissionable income
-                        const dateKey = inv.fecha_venta
+                        const dateKey = inv.fecha_contable || inv.fecha_venta
                         if (trendMap[dateKey] !== undefined) {
                             trendMap[dateKey] += itemTotal
                         }
@@ -196,8 +196,8 @@ export default function MetricsPage() {
             let prevQuery = supabase
                 .from('invoices')
                 .select('invoice_items(total_q, comisionable)')
-                .gte('fecha_venta', format(prevStart, 'yyyy-MM-dd'))
-                .lte('fecha_venta', format(prevEnd, 'yyyy-MM-dd'))
+                .gte('fecha_contable', format(prevStart, 'yyyy-MM-dd'))
+                .lte('fecha_contable', format(prevEnd, 'yyyy-MM-dd'))
 
             if (role === 'doctor') {
                 prevQuery = prevQuery.eq('doctor_id', user.id)

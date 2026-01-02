@@ -40,6 +40,8 @@ export function InvoiceWizard() {
     const [selectedCategories, setSelectedCategories] = useState<Record<number, string>>({})
     const [error, setError] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<'admin' | 'doctor' | null>(null)
+    const [accountingMonth, setAccountingMonth] = useState<string>('')
+    const [accountingYear, setAccountingYear] = useState<string>('')
     const supabase = createClient()
 
     useEffect(() => {
@@ -155,19 +157,26 @@ export function InvoiceWizard() {
             const header = previewData[0]
 
             // --- VALIDACIÓN DE MES ACTUAL ---
+            // --- VALIDACIÓN DE MES ACTUAL ---
             const invoiceDate = new Date(header.fecha_venta_iso + 'T12:00:00')
             const now = new Date()
             const isCurrentMonth = invoiceDate.getMonth() === now.getMonth() && invoiceDate.getFullYear() === now.getFullYear()
 
-            if (!isCurrentMonth) {
-                if (userRole === 'doctor') {
-                    throw new Error("⚠️ No se puede guardar tu factura porque es de un mes anterior o posterior. Solo puedes registrar facturas del mes actual.")
-                } else if (userRole === 'admin') {
-                    const confirmSave = window.confirm("⚠️ Estás registrando una factura que NO es del mes actual. ¿Estás seguro que la quieres registrar aunque sea mes anterior?")
-                    if (!confirmSave) {
-                        setIsLoading(false)
-                        return
-                    }
+            // Lógica de validación de fechas
+            let finalAccountingDate = header.fecha_venta_iso
+
+            if (userRole === 'admin') {
+                // Si el admin eligió mes/año custom
+                if (accountingMonth && accountingYear) {
+                    // Cramos una fecha arbitraria (día 15) de ese mes y año
+                    // Formato YYYY-MM-DD
+                    const m = (parseInt(accountingMonth) + 1).toString().padStart(2, '0')
+                    finalAccountingDate = `${accountingYear}-${m}-15`
+                }
+            } else {
+                // Si es doctor, restringir estrictamente al mes actual
+                if (!isCurrentMonth) {
+                    throw new Error("⚠️ No se puede guardar tu factura porque es de un mes anterior o posterior. Solo puedes registrar facturas del mes actual. Contacta a un administrador.")
                 }
             }
             // --------------------------------
@@ -187,7 +196,8 @@ export function InvoiceWizard() {
                     cambio_q: header.cambio_q,
                     doctor_id: userData.user.id,
                     observaciones_doctora: header.observaciones_doctora,
-                    file_url: url
+                    file_url: url,
+                    fecha_contable: finalAccountingDate // Guardamos la fecha contable
                 })
                 .select()
                 .single()
@@ -224,6 +234,10 @@ export function InvoiceWizard() {
         setObservations('')
         setPreviewData([])
         setSelectedCategories({})
+        setPreviewData([])
+        setSelectedCategories({})
+        setAccountingMonth('')
+        setAccountingYear('')
         setError(null)
     }
 
@@ -340,6 +354,41 @@ export function InvoiceWizard() {
                                     </TableBody>
                                 </Table>
                             </div>
+
+                            {/* Selector de Mes Contable para Admins (Discreto) */}
+                            {userRole === 'admin' && (
+                                <div className="flex flex-col items-center justify-center gap-2 pt-4 border-t border-dashed border-zinc-200 dark:border-zinc-800 w-full max-w-lg mx-auto">
+                                    <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
+                                        Opciones Avanzadas (Admin)
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-zinc-500 font-medium">Aplicar al cierre de:</span>
+                                        <select
+                                            className="h-8 text-xs bg-zinc-50 border border-zinc-200 rounded-md px-2 focus:ring-0 focus:border-zinc-400 cursor-pointer"
+                                            value={accountingMonth}
+                                            onChange={(e) => setAccountingMonth(e.target.value)}
+                                        >
+                                            <option value="">(Mes de Factura)</option>
+                                            {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, i) => (
+                                                <option key={m} value={i}>{m}</option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            className="h-8 text-xs bg-zinc-50 border border-zinc-200 rounded-md px-2 focus:ring-0 focus:border-zinc-400 cursor-pointer"
+                                            value={accountingYear}
+                                            onChange={(e) => setAccountingYear(e.target.value)}
+                                        >
+                                            <option value="">(Año)</option>
+                                            {Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <p className="text-[10px] text-zinc-400 max-w-sm text-center leading-tight">
+                                        Si lo dejas en blanco, se guardará con la fecha original del ticket. Si seleccionas algo, contará para ese mes específico.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 

@@ -144,10 +144,10 @@ export default function SettlementsPage() {
             // Buscamos todas las ventas comisionables del mes
             const { data, error } = await supabase
                 .from('invoice_items')
-                .select('total_q, invoices!inner(fecha_venta)')
+                .select('total_q, invoices!inner(fecha_contable)')
                 .eq('comisionable', true)
-                .gte('invoices.fecha_venta', format(start, 'yyyy-MM-dd'))
-                .lte('invoices.fecha_venta', format(end, 'yyyy-MM-dd'))
+                .gte('invoices.fecha_contable', format(start, 'yyyy-MM-dd'))
+                .lte('invoices.fecha_contable', format(end, 'yyyy-MM-dd'))
 
             if (error) throw error
 

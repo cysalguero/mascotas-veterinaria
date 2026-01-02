@@ -29,7 +29,8 @@ import {
     Tag,
     XCircle,
     CheckCircle,
-    ExternalLink
+    ExternalLink,
+    CalendarClock
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -38,6 +39,7 @@ interface Invoice {
     id: string
     ticket_numero: number
     fecha_venta: string
+    fecha_contable?: string
     forma_pago: string
     total_q: number
     observaciones_doctora: string
@@ -284,7 +286,10 @@ export function InvoiceTable() {
                             filteredInvoices.map((inv) => (
                                 <Fragment key={inv.id}>
                                     <TableRow
-                                        className="cursor-pointer hover:bg-zinc-50/30 transition-colors group"
+                                        className={`cursor-pointer transition-colors group ${inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear())
+                                                ? 'bg-purple-50/40 hover:bg-purple-50/70 border-l-2 border-l-purple-400'
+                                                : 'hover:bg-zinc-50/30'
+                                            }`}
                                         onClick={() => toggleRow(inv.id)}
                                     >
                                         <TableCell>
@@ -298,7 +303,17 @@ export function InvoiceTable() {
                                             #{inv.ticket_numero}
                                         </TableCell>
                                         <TableCell className="text-zinc-600">
-                                            {format(new Date(inv.fecha_venta), 'PPP', { locale: es })}
+                                            <div className="flex flex-col">
+                                                <span>{format(new Date(inv.fecha_venta), 'PPP', { locale: es })}</span>
+                                                {inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear()) && (
+                                                    <div className="flex items-center gap-1 mt-1 text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md w-fit border border-purple-100" title={`Contabilizado en: ${format(new Date(inv.fecha_contable), 'MMMM yyyy', { locale: es })}`}>
+                                                        <CalendarClock className="h-3 w-3" />
+                                                        <span className="text-[10px] font-bold uppercase tracking-tight">
+                                                            {format(new Date(inv.fecha_contable), 'MMM yyyy', { locale: es })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 border border-zinc-200">
@@ -344,16 +359,32 @@ export function InvoiceTable() {
                                         <TableRow className="bg-zinc-50/50 dark:bg-zinc-900/30 border-t-0">
                                             <TableCell colSpan={6} className="p-0">
                                                 <div className="px-12 py-8 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                        <div className="space-y-1">
-                                                            <h4 className="text-sm font-black uppercase tracking-widest text-zinc-400">Detalle de Operación</h4>
-                                                            <p className="text-xs text-zinc-500">Desglose de productos y servicios para el ticket #{inv.ticket_numero}</p>
+                                                    <div className="flex flex-col gap-4">
+                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                            <div className="space-y-1">
+                                                                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-400">Detalle de Operación</h4>
+                                                                <p className="text-xs text-zinc-500">Desglose de productos y servicios para el ticket #{inv.ticket_numero}</p>
+                                                            </div>
+                                                            {inv.observaciones_doctora && (
+                                                                <div className="text-sm text-zinc-600 bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 italic max-w-md shadow-sm">
+                                                                    <span className="text-blue-400 mr-2 font-serif text-xl">“</span>
+                                                                    {inv.observaciones_doctora}
+                                                                    <span className="text-blue-400 ml-2 font-serif text-xl">”</span>
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        {inv.observaciones_doctora && (
-                                                            <div className="text-sm text-zinc-600 bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 italic max-w-md shadow-sm">
-                                                                <span className="text-blue-400 mr-2 font-serif text-xl">“</span>
-                                                                {inv.observaciones_doctora}
-                                                                <span className="text-blue-400 ml-2 font-serif text-xl">”</span>
+
+                                                        {inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear()) && (
+                                                            <div className="p-4 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800 rounded-xl flex items-start gap-3 w-full max-w-2xl">
+                                                                <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400">
+                                                                    <CalendarClock size={18} />
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="text-xs font-black uppercase tracking-widest text-purple-700 dark:text-purple-300">Nota Contable</h4>
+                                                                    <p className="text-xs text-purple-600/80 dark:text-purple-400 font-medium leading-relaxed mt-1">
+                                                                        Este registro tiene una fecha contable diferente a su fecha de emisión. Pertenece al cierre de <span className="font-black underline">{format(new Date(inv.fecha_contable), 'MMMM yyyy', { locale: es })}</span>.
+                                                                    </p>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>

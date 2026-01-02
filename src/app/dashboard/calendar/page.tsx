@@ -26,6 +26,7 @@ import {
     ExternalLink,
     CheckCircle,
     XCircle,
+    CalendarClock,
     Calendar as CalendarIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,7 @@ interface Invoice {
     id: string
     ticket_numero: number
     fecha_venta: string
+    fecha_contable?: string
     forma_pago: string
     total_q: number
     pagado_q: number
@@ -241,13 +243,20 @@ export default function CalendarPage() {
                                                     setSelectedInvoice(inv)
                                                     setIsDrawerOpen(true)
                                                 }}
-                                                className={`group text-left p-2 rounded-xl border text-[10px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex flex-col gap-0.5 ${isPaid(inv)
-                                                    ? 'bg-blue-50/50 border-blue-100 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800/50 dark:text-blue-300'
-                                                    : 'bg-orange-50/50 border-orange-100 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800/50 dark:text-orange-300'
+                                                className={`group text-left p-2 rounded-xl border text-[10px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex flex-col gap-0.5 ${inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear())
+                                                    ? 'bg-purple-50/80 border-purple-200 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800/50 dark:text-purple-300'
+                                                    : isPaid(inv)
+                                                        ? 'bg-blue-50/50 border-blue-100 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800/50 dark:text-blue-300'
+                                                        : 'bg-orange-50/50 border-orange-100 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800/50 dark:text-orange-300'
                                                     }`}
                                             >
                                                 <div className="flex items-center justify-between gap-1 w-full">
-                                                    <span className="font-mono font-bold truncate opacity-80">#{inv.ticket_numero}</span>
+                                                    <span className="font-mono font-bold truncate opacity-80 flex items-center gap-1">
+                                                        #{inv.ticket_numero}
+                                                        {inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear()) && (
+                                                            <CalendarClock size={10} className="text-purple-600" />
+                                                        )}
+                                                    </span>
                                                     <span className="font-black whitespace-nowrap">Q{inv.total_q.toFixed(0)}</span>
                                                 </div>
                                             </button>
@@ -284,6 +293,20 @@ export default function CalendarPage() {
                                     <SheetDescription className="text-sm text-zinc-500 font-semibold tracking-wide">
                                         {format(parseISO(selectedInvoice.fecha_venta), 'PPPP', { locale: es })}
                                     </SheetDescription>
+
+                                    {selectedInvoice.fecha_contable && (new Date(selectedInvoice.fecha_venta).getMonth() !== new Date(selectedInvoice.fecha_contable).getMonth() || new Date(selectedInvoice.fecha_venta).getFullYear() !== new Date(selectedInvoice.fecha_contable).getFullYear()) && (
+                                        <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800 rounded-xl flex items-start gap-3">
+                                            <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400">
+                                                <CalendarClock size={18} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xs font-black uppercase tracking-widest text-purple-700 dark:text-purple-300">Nota Contable</h4>
+                                                <p className="text-xs text-purple-600/80 dark:text-purple-400 font-medium leading-relaxed mt-1">
+                                                    Este registro tiene una fecha contable diferente a su fecha de emisión. Pertenece al cierre de <span className="font-black underline">{format(parseISO(selectedInvoice.fecha_contable), 'MMMM yyyy', { locale: es })}</span>.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
