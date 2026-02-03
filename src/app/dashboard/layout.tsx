@@ -356,7 +356,7 @@ export default function DashboardLayout({
             />
 
             <div className="lg:pl-64 focus-within:ring-0">
-                <header className="flex h-16 items-center border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-6 justify-between sticky top-0 z-10">
+                <header className="flex h-16 items-center border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-6 justify-between sticky top-0 z-50">
                     <nav className="flex items-center text-sm font-medium uppercase tracking-wider">
                         <Link
                             href="/dashboard/metrics"

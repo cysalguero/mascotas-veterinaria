@@ -298,7 +298,7 @@ export default function SettlementsHistoryPage() {
                                     <TableCell>
                                         {s.alcanzo_meta ? (
                                             <div className="flex flex-col">
-                                                <span className="font-black text-amber-600">$ 100.00</span>
+                                                <span className="font-black text-amber-600">$ {s.bono_meta_usd ? s.bono_meta_usd.toFixed(2) : '100.00'}</span>
                                                 <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">Meta Lograda</span>
                                             </div>
                                         ) : (

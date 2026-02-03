@@ -287,8 +287,8 @@ export function InvoiceTable() {
                                 <Fragment key={inv.id}>
                                     <TableRow
                                         className={`cursor-pointer transition-colors group ${inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear())
-                                                ? 'bg-purple-50/40 hover:bg-purple-50/70 border-l-2 border-l-purple-400'
-                                                : 'hover:bg-zinc-50/30'
+                                            ? 'bg-purple-50/40 hover:bg-purple-50/70 border-l-2 border-l-purple-400'
+                                            : 'hover:bg-zinc-50/30'
                                             }`}
                                         onClick={() => toggleRow(inv.id)}
                                     >
@@ -304,12 +304,12 @@ export function InvoiceTable() {
                                         </TableCell>
                                         <TableCell className="text-zinc-600">
                                             <div className="flex flex-col">
-                                                <span>{format(new Date(inv.fecha_venta), 'PPP', { locale: es })}</span>
-                                                {inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear()) && (
-                                                    <div className="flex items-center gap-1 mt-1 text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md w-fit border border-purple-100" title={`Contabilizado en: ${format(new Date(inv.fecha_contable), 'MMMM yyyy', { locale: es })}`}>
+                                                <span>{format(new Date(inv.fecha_venta + 'T12:00:00'), 'PPP', { locale: es })}</span>
+                                                {inv.fecha_contable && (new Date(inv.fecha_venta + 'T12:00:00').getMonth() !== new Date(inv.fecha_contable + 'T12:00:00').getMonth() || new Date(inv.fecha_venta + 'T12:00:00').getFullYear() !== new Date(inv.fecha_contable + 'T12:00:00').getFullYear()) && (
+                                                    <div className="flex items-center gap-1 mt-1 text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md w-fit border border-purple-100" title={`Contabilizado en: ${format(new Date(inv.fecha_contable + 'T12:00:00'), 'MMMM yyyy', { locale: es })}`}>
                                                         <CalendarClock className="h-3 w-3" />
                                                         <span className="text-[10px] font-bold uppercase tracking-tight">
-                                                            {format(new Date(inv.fecha_contable), 'MMM yyyy', { locale: es })}
+                                                            {format(new Date(inv.fecha_contable + 'T12:00:00'), 'MMM yyyy', { locale: es })}
                                                         </span>
                                                     </div>
                                                 )}

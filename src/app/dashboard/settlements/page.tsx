@@ -8,6 +8,8 @@ import {
     endOfMonth,
     setMonth,
     setYear,
+    addMonths,
+    subMonths
 } from 'date-fns'
 import {
     FileSpreadsheet,
@@ -23,7 +25,9 @@ import {
     CreditCard,
     Edit3,
     Lock,
-    Trophy
+    Trophy,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react'
 import {
     Card,
@@ -107,6 +111,9 @@ export default function SettlementsPage() {
         setTotalDaysInMonth(daysInMonth)
         // Solo actualizamos workDays si no está bloqueado (registro nuevo)
     }, [currentDate])
+
+    const nextMonth = () => setCurrentDate(addMonths(currentDate, 1))
+    const prevMonth = () => setCurrentDate(subMonths(currentDate, 1))
 
     async function checkExistingSettlement() {
         try {
@@ -218,9 +225,13 @@ export default function SettlementsPage() {
     const commissionQuetzales = commissionableIncome * 0.05
     const commissionUsd = commissionQuetzales / exchangeRate
 
-    // --- LÓGICA DE META MENSUAL (Q30,000 de Ventas) ---
-    const hasReachedGoal = commissionableIncome >= 30000
-    const metaBonusUsd = hasReachedGoal ? 100 : 0
+    // --- LÓGICA DE META MENSUAL (Iterativa: $100 por cada Q30k) ---
+    // Antes: const hasReachedGoal = commissionableIncome >= 30000
+    // Antes: const metaBonusUsd = hasReachedGoal ? 100 : 0
+
+    const bonusMultipliers = Math.floor(commissionableIncome / 30000)
+    const hasReachedGoal = bonusMultipliers > 0
+    const metaBonusUsd = bonusMultipliers * 100
     // --------------------------------------------------
 
     const totalToPayUsd = proratedSalaryUsd + commissionUsd + metaBonusUsd
@@ -274,7 +285,11 @@ export default function SettlementsPage() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                    <Button variant="ghost" size="icon" onClick={prevMonth} className="h-9 w-9 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full">
+                        <ChevronLeft className="h-4 w-4 text-zinc-600" />
+                    </Button>
+
                     <div className="flex items-center bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-1 border border-zinc-100 dark:border-zinc-800">
                         <div className="relative group px-2">
                             <select
@@ -302,13 +317,20 @@ export default function SettlementsPage() {
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-hover:text-zinc-900 transition-colors pointer-events-none" />
                         </div>
                     </div>
+
+                    <Button variant="ghost" size="icon" onClick={nextMonth} className="h-9 w-9 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full">
+                        <ChevronRight className="h-4 w-4 text-zinc-600" />
+                    </Button>
+
+                    <div className="w-px h-8 bg-zinc-200 dark:bg-zinc-800 mx-2" />
+
                     <Button
                         variant="outline"
                         size="icon"
                         onClick={fetchCommissionableData}
-                        className="rounded-2xl h-11 w-11"
+                        className="rounded-full h-9 w-9 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
                     >
-                        <RefreshCw className={`h-5 w-5 ${isLoading || isSaving ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`h-4 w-4 ${isLoading || isSaving ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
             </div>
@@ -465,7 +487,7 @@ export default function SettlementsPage() {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-black text-green-700 dark:text-green-400 uppercase tracking-tighter">Bono por Meta Alcanzada</p>
-                                                <p className="text-xs font-bold text-green-600/70 italic">¡Felicidades! Meta de Q30,000 superada</p>
+                                                <p className="text-xs font-bold text-green-600/70 italic">¡Felicidades! {bonusMultipliers}x Meta de Q30,000 superada</p>
                                             </div>
                                         </div>
                                         <div className="text-right">

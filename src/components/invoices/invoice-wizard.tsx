@@ -156,15 +156,14 @@ export function InvoiceWizard() {
 
             const header = previewData[0]
 
-            // --- VALIDACIÓN DE MES ACTUAL ---
-            // --- VALIDACIÓN DE MES ACTUAL ---
-            // --- VALIDACIÓN DE MES ACTUAL (ROBUSTA) ---
-            const [invYear, invMonth] = header.fecha_venta_iso.split('-').map(Number)
+            // --- VALIDACIÓN DE DÍA ACTUAL ---
+            const [invYear, invMonth, invDay] = header.fecha_venta_iso.split('-').map(Number)
             const now = new Date()
             const currentYear = now.getFullYear()
             const currentMonth = now.getMonth() + 1 // getMonth() es 0-index
+            const currentDay = now.getDate()
 
-            const isCurrentMonth = invYear === currentYear && invMonth === currentMonth
+            const isCurrentDay = invYear === currentYear && invMonth === currentMonth && invDay === currentDay
 
             // Lógica de validación de fechas
             let finalAccountingDate = header.fecha_venta_iso
@@ -178,9 +177,9 @@ export function InvoiceWizard() {
                     finalAccountingDate = `${accountingYear}-${m}-15`
                 }
             } else {
-                // Si es doctor, restringir estrictamente al mes actual
-                if (!isCurrentMonth) {
-                    throw new Error(`⚠️ No se puede guardar. La factura es de ${invMonth}/${invYear} y estamos en ${currentMonth}/${currentYear}. Solo puedes registrar facturas del mes actual.`)
+                // Si es doctor, restringir estrictamente al DÍA actual
+                if (!isCurrentDay) {
+                    throw new Error(`⚠️ No se puede guardar. La factura es del ${invDay}/${invMonth}/${invYear} y hoy es ${currentDay}/${currentMonth}/${currentYear}. Solo puedes registrar facturas del día EXACTO actual.`)
                 }
             }
             // --------------------------------

@@ -47,6 +47,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog'
 
 interface Invoice {
     id: string
@@ -80,6 +87,8 @@ export default function CalendarPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+    const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+    const [isDayModalOpen, setIsDayModalOpen] = useState(false)
     const supabase = createClient()
 
     useEffect(() => {
@@ -218,7 +227,11 @@ export default function CalendarPage() {
                             return (
                                 <div
                                     key={i}
-                                    className={`p-2 border-r border-b border-border transition-colors flex flex-col gap-1 min-h-[120px] ${!isCurrentMonth ? 'bg-zinc-50/30 dark:bg-zinc-900/10' : ''
+                                    onClick={() => {
+                                        setSelectedDay(day)
+                                        setIsDayModalOpen(true)
+                                    }}
+                                    className={`p-2 border-r border-b border-border transition-all flex flex-col gap-1 min-h-[120px] cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 ${!isCurrentMonth ? 'bg-zinc-50/30 dark:bg-zinc-900/10' : ''
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
@@ -239,11 +252,12 @@ export default function CalendarPage() {
                                         {dayInvoices.map(inv => (
                                             <button
                                                 key={inv.id}
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
                                                     setSelectedInvoice(inv)
                                                     setIsDrawerOpen(true)
                                                 }}
-                                                className={`group text-left p-2 rounded-xl border text-[10px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex flex-col gap-0.5 ${inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear())
+                                                className={`group text-left p-2 rounded-xl border text-[10px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex flex-col gap-0.5 ${inv.fecha_contable && (new Date(inv.fecha_venta + 'T12:00:00').getMonth() !== new Date(inv.fecha_contable + 'T12:00:00').getMonth() || new Date(inv.fecha_venta + 'T12:00:00').getFullYear() !== new Date(inv.fecha_contable + 'T12:00:00').getFullYear())
                                                     ? 'bg-purple-50/80 border-purple-200 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800/50 dark:text-purple-300'
                                                     : isPaid(inv)
                                                         ? 'bg-blue-50/50 border-blue-100 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800/50 dark:text-blue-300'
@@ -253,7 +267,7 @@ export default function CalendarPage() {
                                                 <div className="flex items-center justify-between gap-1 w-full">
                                                     <span className="font-mono font-bold truncate opacity-80 flex items-center gap-1">
                                                         #{inv.ticket_numero}
-                                                        {inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear()) && (
+                                                        {inv.fecha_contable && (new Date(inv.fecha_venta + 'T12:00:00').getMonth() !== new Date(inv.fecha_contable + 'T12:00:00').getMonth() || new Date(inv.fecha_venta + 'T12:00:00').getFullYear() !== new Date(inv.fecha_contable + 'T12:00:00').getFullYear()) && (
                                                             <CalendarClock size={10} className="text-purple-600" />
                                                         )}
                                                     </span>
@@ -268,6 +282,112 @@ export default function CalendarPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Footer Monthly Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-6">
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Registros</span>
+                    <div className="flex items-end gap-2 mt-1">
+                        <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">{invoices.length}</span>
+                        <span className="text-xs font-bold text-zinc-400 mb-1.5">facturas</span>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Procedimientos</span>
+                    <div className="flex items-end gap-2 mt-1">
+                        <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">
+                            {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.cantidad || 0) : 0), 0) || 0), 0)}
+                        </span>
+                        <span className="text-xs font-bold text-zinc-400 mb-1.5">servicios</span>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Comisionable</span>
+                    <div className="flex items-end gap-2 mt-1">
+                        <span className="text-3xl font-black text-blue-600">
+                            Q {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.total_q || 0) : 0), 0) || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                        </span>
+                        <span className="text-xs font-bold text-zinc-400 mb-1.5">en {MONTHS[currentDate.getMonth()]}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Day Details Modal */}
+            <Dialog open={isDayModalOpen} onOpenChange={setIsDayModalOpen}>
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black tracking-tighter">
+                            {selectedDay && format(selectedDay, 'PPPP', { locale: es })}
+                        </DialogTitle>
+                        <DialogDescription className="font-medium text-zinc-500">
+                            Resumen de actividad y facturas registradas.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedDay && (
+                        <div className="space-y-6 mt-4">
+                            {/* Daily Summary */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Facturado Hoy</p>
+                                    <p className="text-2xl font-black text-blue-600">
+                                        Q {getInvoicesForDay(selectedDay).reduce((acc, inv) => acc + inv.total_q, 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Registros</p>
+                                    <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
+                                        {getInvoicesForDay(selectedDay).length}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            {/* Invoices List */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-400">Detalle de Facturas</h4>
+                                {getInvoicesForDay(selectedDay).length === 0 ? (
+                                    <div className="py-8 text-center text-zinc-400 italic font-medium bg-zinc-50 dark:bg-zinc-900/50 rounded-xl">
+                                        No hay movimientos registrados en este día.
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {getInvoicesForDay(selectedDay).map((inv) => (
+                                            <div
+                                                key={inv.id}
+                                                onClick={() => {
+                                                    setSelectedInvoice(inv)
+                                                    setIsDrawerOpen(true)
+                                                }}
+                                                className="group flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer"
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`p-2 rounded-lg ${isPaid(inv) ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                        <Tag size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-zinc-900 dark:text-zinc-100">Ticket #{inv.ticket_numero}</p>
+                                                        <p className="text-xs text-zinc-500 font-medium">{inv.invoice_items?.length || 0} items • {inv.forma_pago}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-black text-zinc-900 dark:text-zinc-50">Q {inv.total_q.toFixed(2)}</p>
+                                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${isPaid(inv) ? 'text-blue-600' : 'text-orange-500'}`}>
+                                                        {isPaid(inv) ? 'Pagado' : 'Pendiente'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Sidebar Details Drawer */}
             <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
@@ -291,10 +411,10 @@ export default function CalendarPage() {
                                         Ticket #{selectedInvoice.ticket_numero}
                                     </SheetTitle>
                                     <SheetDescription className="text-sm text-zinc-500 font-semibold tracking-wide">
-                                        {format(parseISO(selectedInvoice.fecha_venta), 'PPPP', { locale: es })}
+                                        {format(new Date(selectedInvoice.fecha_venta + 'T12:00:00'), 'PPPP', { locale: es })}
                                     </SheetDescription>
 
-                                    {selectedInvoice.fecha_contable && (new Date(selectedInvoice.fecha_venta).getMonth() !== new Date(selectedInvoice.fecha_contable).getMonth() || new Date(selectedInvoice.fecha_venta).getFullYear() !== new Date(selectedInvoice.fecha_contable).getFullYear()) && (
+                                    {selectedInvoice.fecha_contable && (new Date(selectedInvoice.fecha_venta + 'T12:00:00').getMonth() !== new Date(selectedInvoice.fecha_contable + 'T12:00:00').getMonth() || new Date(selectedInvoice.fecha_venta + 'T12:00:00').getFullYear() !== new Date(selectedInvoice.fecha_contable + 'T12:00:00').getFullYear()) && (
                                         <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800 rounded-xl flex items-start gap-3">
                                             <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400">
                                                 <CalendarClock size={18} />
@@ -302,7 +422,7 @@ export default function CalendarPage() {
                                             <div>
                                                 <h4 className="text-xs font-black uppercase tracking-widest text-purple-700 dark:text-purple-300">Nota Contable</h4>
                                                 <p className="text-xs text-purple-600/80 dark:text-purple-400 font-medium leading-relaxed mt-1">
-                                                    Este registro tiene una fecha contable diferente a su fecha de emisión. Pertenece al cierre de <span className="font-black underline">{format(parseISO(selectedInvoice.fecha_contable), 'MMMM yyyy', { locale: es })}</span>.
+                                                    Este registro tiene una fecha contable diferente a su fecha de emisión. Pertenece al cierre de <span className="font-black underline">{format(new Date(selectedInvoice.fecha_contable + 'T12:00:00'), 'MMMM yyyy', { locale: es })}</span>.
                                                 </p>
                                             </div>
                                         </div>
