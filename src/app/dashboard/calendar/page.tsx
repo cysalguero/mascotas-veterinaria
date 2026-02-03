@@ -109,8 +109,8 @@ export default function CalendarPage() {
         const { data, error } = await supabase
             .from('invoices')
             .select('*, invoice_items(*)')
-            .gte('fecha_venta', format(start, 'yyyy-MM-dd'))
-            .lte('fecha_venta', format(end, 'yyyy-MM-dd'))
+            .gte('fecha_contable', format(start, 'yyyy-MM-dd'))
+            .lte('fecha_contable', format(end, 'yyyy-MM-dd'))
 
         if (!error && data) {
             setInvoices(data)
@@ -140,7 +140,7 @@ export default function CalendarPage() {
     })
 
     const getInvoicesForDay = (day: Date) => {
-        return invoices.filter(inv => isSameDay(parseISO(inv.fecha_venta), day))
+        return invoices.filter(inv => isSameDay(parseISO(inv.fecha_contable || inv.fecha_venta), day))
     }
 
     const isPaid = (inv: Invoice) => {
@@ -355,32 +355,47 @@ export default function CalendarPage() {
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 gap-3">
-                                        {getInvoicesForDay(selectedDay).map((inv) => (
-                                            <div
-                                                key={inv.id}
-                                                onClick={() => {
-                                                    setSelectedInvoice(inv)
-                                                    setIsDrawerOpen(true)
-                                                }}
-                                                className="group flex items-center justify-between p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-pointer"
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`p-2 rounded-lg ${isPaid(inv) ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                                        <Tag size={18} />
+                                        {getInvoicesForDay(selectedDay).map((inv) => {
+                                            const isDifferentDate = inv.fecha_contable && (new Date(inv.fecha_venta + 'T12:00:00').getMonth() !== new Date(inv.fecha_contable + 'T12:00:00').getMonth() || new Date(inv.fecha_venta + 'T12:00:00').getFullYear() !== new Date(inv.fecha_contable + 'T12:00:00').getFullYear());
+                                            const statusColorClasses = isDifferentDate
+                                                ? 'bg-purple-50/50 border-purple-200 hover:border-purple-400 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800'
+                                                : isPaid(inv)
+                                                    ? 'bg-blue-50/50 border-blue-200 hover:border-blue-400 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800'
+                                                    : 'bg-orange-50/50 border-orange-200 hover:border-orange-400 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800';
+
+                                            const iconBgClasses = isDifferentDate
+                                                ? 'bg-purple-100 text-purple-600'
+                                                : isPaid(inv)
+                                                    ? 'bg-blue-100 text-blue-600'
+                                                    : 'bg-orange-100 text-orange-600';
+
+                                            return (
+                                                <div
+                                                    key={inv.id}
+                                                    onClick={() => {
+                                                        setSelectedInvoice(inv)
+                                                        setIsDrawerOpen(true)
+                                                    }}
+                                                    className={`group flex items-center justify-between p-4 border rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer ${statusColorClasses}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`p-2 rounded-lg ${iconBgClasses}`}>
+                                                            {isDifferentDate ? <CalendarClock size={18} /> : <Tag size={18} />}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold">Ticket #{inv.ticket_numero}</p>
+                                                            <p className="text-xs opacity-70 font-medium">{inv.invoice_items?.length || 0} items • {inv.forma_pago}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-bold text-zinc-900 dark:text-zinc-100">Ticket #{inv.ticket_numero}</p>
-                                                        <p className="text-xs text-zinc-500 font-medium">{inv.invoice_items?.length || 0} items • {inv.forma_pago}</p>
+                                                    <div className="text-right">
+                                                        <p className="font-black">Q {inv.total_q.toFixed(2)}</p>
+                                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                                                            {isDifferentDate ? 'Contabilidad Diferida' : isPaid(inv) ? 'Pagado' : 'Pendiente'}
+                                                        </p>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="font-black text-zinc-900 dark:text-zinc-50">Q {inv.total_q.toFixed(2)}</p>
-                                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${isPaid(inv) ? 'text-blue-600' : 'text-orange-500'}`}>
-                                                        {isPaid(inv) ? 'Pagado' : 'Pendiente'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
