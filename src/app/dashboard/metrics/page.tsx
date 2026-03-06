@@ -58,6 +58,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 interface Stats {
+    totalGrossIncome: number
     totalIncome: number
     totalCommission: number
     totalProcedures: number
@@ -67,9 +68,19 @@ interface Stats {
     paymentMethods: { name: string, value: number }[]
     topProducts: { name: string, count: number, revenue: number }[]
     prevMonthIncome: number
+    speciesData: { name: string, value: number, color: string }[]
+    vaccineOpportunities: number
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1']
+const SPECIES_COLORS: Record<string, string> = {
+    'canino': '#3b82f6', // Blue
+    'felino': '#f97316', // Orange
+    'ave': '#eab308',   // Yellow
+    'conejo': '#ec4899', // Pink
+    'roedor': '#a855f7', // Purple
+    'otro': '#94a3b8'   // Gray
+}
 const MONTHS = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -133,12 +144,15 @@ export default function MetricsPage() {
             const { data: invoices, error: invError } = await query
             if (invError) throw invError
 
-            let totalIncome = 0
+            let totalIncome = 0 // Comisionable
+            let totalGrossIncome = 0 // Total facturado (con o sin comisión)
             let totalProcedures = 0
             const customersCount = invoices.length
             const categoryMap: Record<string, number> = {}
             const paymentMap: Record<string, number> = {}
             const productsMap: Record<string, { count: number, revenue: number }> = {}
+            const speciesMap: Record<string, number> = {}
+            const vaccineOpps = new Set<string>() // To count unique patients with 'No Vigente'
 
             // Process Trend for the current viewing month
             const monthDays = eachDayOfInterval({ start, end })
@@ -148,15 +162,13 @@ export default function MetricsPage() {
             })
 
             invoices.forEach(inv => {
-                // Payment Methods and Trend use total invoice value for visualization normally,
-                // but user said "Ingresos al mes son SOLO COMISIONABLES". 
-                // Let's decide if charts should also reflect only commissionable or the whole volume.
-                // For "Tendencia de Ingresos" and "Ventas por Categoría", it makes sense to follow the same rule as "Total Income".
-
                 let invoiceCommissionableTotal = 0
 
                 inv.invoice_items?.forEach((item: any) => {
                     const itemTotal = item.total_q || 0
+
+                    // Sumamos SIEMPRE al gross income
+                    totalGrossIncome += itemTotal
 
                     if (item.comisionable) {
                         invoiceCommissionableTotal += itemTotal
@@ -190,6 +202,23 @@ export default function MetricsPage() {
                 // I'll stick to commissionable only for all financial charts to be consistent with the main KPI.
                 const method = inv.forma_pago || 'No especificado'
                 paymentMap[method] = (paymentMap[method] || 0) + invoiceCommissionableTotal
+
+                // Species Revenue (using Commissionable Total)
+                const s = inv.patient_species?.toLowerCase() || 'otro'
+                const normalizedSpecies = s.includes('canin') || s.includes('perr') ? 'canino' :
+                    s.includes('felin') || s.includes('gat') ? 'felino' :
+                        s.includes('ave') || s.includes('pajar') ? 'ave' :
+                            s.includes('conej') ? 'conejo' :
+                                s.includes('roedor') || s.includes('hamster') ? 'roedor' : 'otro'
+
+                speciesMap[normalizedSpecies] = (speciesMap[normalizedSpecies] || 0) + invoiceCommissionableTotal
+
+                // Vaccine Opportunities
+                // Logic: Check if patient has 'No' in es_vacunal
+                const pData = inv.patient_data as any
+                if (pData?.es_vacunal && (pData.es_vacunal.toLowerCase().includes('no') || pData.es_vacunal.toLowerCase().includes('vencid'))) {
+                    vaccineOpps.add(inv.patient_history_number || inv.patient_name || `unknown-${inv.id}`)
+                }
             })
 
             // FETCH PREVIOUS MONTH DATA FOR COMPARISON
@@ -215,6 +244,7 @@ export default function MetricsPage() {
             })
 
             setStats({
+                totalGrossIncome,
                 totalIncome,
                 totalCommission: totalIncome * 0.05,
                 totalProcedures,
@@ -236,7 +266,13 @@ export default function MetricsPage() {
                     .sort((a, b) => b[1].revenue - a[1].revenue)
                     .slice(0, 5)
                     .map(([name, data]) => ({ name, ...data })),
-                prevMonthIncome
+                prevMonthIncome,
+                speciesData: Object.entries(speciesMap).map(([name, value]) => ({
+                    name: name.charAt(0).toUpperCase() + name.slice(1),
+                    value,
+                    color: SPECIES_COLORS[name] || SPECIES_COLORS['otro']
+                })).sort((a, b) => b.value - a.value),
+                vaccineOpportunities: vaccineOpps.size
             })
 
         } catch (error) {
@@ -366,7 +402,7 @@ export default function MetricsPage() {
                                     </div>
                                 </div>
 
-                                <div className="relative h-4 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                                <div className="relative h-4 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden mt-4">
                                     <div
                                         className={`absolute left-0 top-0 h-full transition-all duration-1000 ease-out rounded-full bg-gradient-to-r from-blue-500 to-blue-700 ${stats.totalIncome >= ((Math.floor(stats.totalIncome / 30000) + 1) * 30000) ? 'from-green-400 to-emerald-600' : ''}`}
                                         style={{ width: `${((stats.totalIncome % 30000) / 30000) * 100}%` }}
@@ -446,15 +482,23 @@ export default function MetricsPage() {
                 stats && (
                     <>
                         {/* Quick Stats Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                             {[
                                 {
-                                    title: `Ingresos ${MONTHS[currentDate.getMonth()]}`,
+                                    title: `Facturado en ${MONTHS[currentDate.getMonth()]}`,
+                                    value: `Q ${(stats.totalGrossIncome || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}`,
+                                    icon: DollarSign,
+                                    color: 'text-zinc-600 dark:text-zinc-400',
+                                    bg: 'bg-zinc-100 dark:bg-zinc-800',
+                                    sub: `Ingreso total`
+                                },
+                                {
+                                    title: `Comisionable ${MONTHS[currentDate.getMonth()]}`,
                                     value: `Q ${stats.totalIncome.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`,
                                     icon: DollarSign,
                                     color: 'text-blue-600',
                                     bg: 'bg-blue-50',
-                                    sub: `Ventas procesadas`
+                                    sub: `Monto para comisiones`
                                 },
                                 {
                                     title: 'Procedimientos',
@@ -503,6 +547,29 @@ export default function MetricsPage() {
                                 </Card>
                             ))}
                         </div>
+
+                        {/* Vaccine Opportunities Banner */}
+                        {stats.vaccineOpportunities > 0 && (
+                            <div className="bg-gradient-to-r from-pink-500 to-rose-600 rounded-3xl p-6 md:p-8 shadow-xl text-white relative overflow-hidden group">
+                                <div className="absolute right-0 top-0 h-full w-1/3 bg-white/10 skew-x-12 transform translate-x-12 group-hover:translate-x-6 transition-transform duration-700" />
+                                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                                    <div className="flex items-center gap-6">
+                                        <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
+                                            <Activity size={32} className="text-white" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-2xl font-black tracking-tight">Oportunidades de Vacunación</h3>
+                                            <p className="text-pink-100 font-medium max-w-lg mt-1">
+                                                Detectamos <span className="font-black bg-white/20 px-2 py-0.5 rounded-lg">{stats.vaccineOpportunities} pacientes</span> atendidos este mes con vacunas vencidas o pendientes.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white text-pink-600 px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wide shadow-lg hover:bg-pink-50 transition-colors cursor-pointer">
+                                        Ver Pacientes
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Charts Section */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -688,9 +755,59 @@ export default function MetricsPage() {
                                 </CardContent>
                             </Card>
                         </div>
+
+                        {/* Species Revenue */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <Card className="rounded-[32px] border-zinc-200 dark:border-zinc-800 shadow-xl bg-white dark:bg-zinc-950">
+                                <CardHeader className="p-8">
+                                    <CardTitle className="text-2xl font-black flex items-center gap-3">
+                                        <div className="text-orange-500 bg-orange-50 dark:bg-orange-900/20 p-2 rounded-xl">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-paw-print"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+                                        </div>
+                                        Ingresos por Especie
+                                    </CardTitle>
+                                    <CardDescription className="font-medium">¿Quiénes son tus mejores clientes?</CardDescription>
+                                </CardHeader>
+                                <CardContent className="h-[400px] pb-8">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <RePieChart>
+                                            <Pie
+                                                data={stats.speciesData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={90}
+                                                outerRadius={130}
+                                                paddingAngle={8}
+                                                dataKey="value"
+                                            >
+                                                {stats.speciesData.map((entry, index) => (
+                                                    <Cell key={`cell-species-${index}`} fill={entry.color} stroke="none" />
+                                                ))}
+                                            </Pie>
+                                            <ReTooltip
+                                                contentStyle={{
+                                                    borderRadius: '24px',
+                                                    border: 'none',
+                                                    boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)',
+                                                    fontWeight: '900',
+                                                    padding: '12px 20px'
+                                                }}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Total']}
+                                            />
+                                            <Legend
+                                                verticalAlign="bottom"
+                                                height={36}
+                                                iconType="circle"
+                                                formatter={(value) => <span className="text-xs font-black text-zinc-500 uppercase tracking-tighter">{value}</span>}
+                                            />
+                                        </RePieChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </div>
                     </>
                 )
             }
-        </div >
+        </div>
     )
 }

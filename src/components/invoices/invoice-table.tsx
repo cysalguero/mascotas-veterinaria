@@ -34,6 +34,10 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { PatientQuickView, PatientData } from '@/components/patients/patient-quick-view'
+import { PatientEditor } from '@/components/patients/patient-editor'
+import { VetesoftPatient } from '@/actions/vetesoft'
+import { PatientAvatar } from '@/components/patients/patient-avatar'
 
 interface Invoice {
     id: string
@@ -45,6 +49,9 @@ interface Invoice {
     observaciones_doctora: string
     file_url: string
     doctor_id: string
+    patient_name?: string
+    patient_history_number?: string
+    patient_data?: PatientData
     invoice_items?: InvoiceItem[]
 }
 
@@ -73,6 +80,16 @@ export function InvoiceTable() {
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
     const [categories, setCategories] = useState<Category[]>([])
     const [error, setError] = useState<string | null>(null)
+
+    // Quick View State
+    const [quickViewPatients, setQuickViewPatients] = useState<PatientData[]>([])
+    const [isQuickViewOpen, setIsQuickViewOpen] = useState(false)
+
+    // Editor State
+    const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null)
+    const [editorInitialPatients, setEditorInitialPatients] = useState<VetesoftPatient[]>([])
+    const [isEditorOpen, setIsEditorOpen] = useState(false)
+
     const supabase = createClient()
 
     useEffect(() => {
@@ -136,6 +153,7 @@ export function InvoiceTable() {
         const matchesSearch = (
             inv.ticket_numero.toString().includes(searchLower) ||
             inv.observaciones_doctora?.toLowerCase().includes(searchLower) ||
+            inv.patient_name?.toLowerCase().includes(searchLower) || // Search by patient
             inv.invoice_items?.some(item => item.descripcion.toLowerCase().includes(searchLower))
         )
 
@@ -269,6 +287,7 @@ export function InvoiceTable() {
                         <TableRow>
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead className="font-bold text-zinc-900">Ticket #</TableHead>
+                            <TableHead className="font-bold text-zinc-900">Pac</TableHead>
                             <TableHead className="font-bold text-zinc-900">Fecha</TableHead>
                             <TableHead className="font-bold text-zinc-900">Forma de Pago</TableHead>
                             <TableHead className="text-right font-bold text-zinc-900">Total</TableHead>
@@ -278,7 +297,7 @@ export function InvoiceTable() {
                     <TableBody>
                         {filteredInvoices.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-zinc-500">
+                                <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
                                     No se encontraron registros.
                                 </TableCell>
                             </TableRow>
@@ -301,6 +320,38 @@ export function InvoiceTable() {
                                         </TableCell>
                                         <TableCell className="font-mono font-bold text-zinc-700">
                                             #{inv.ticket_numero}
+                                        </TableCell>
+                                        <TableCell>
+                                            {inv.patient_name ? (
+                                                <div
+                                                    className="flex items-center gap-3 group/patient cursor-pointer"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        const pData = inv.patient_data as any
+                                                        const patients = Array.isArray(pData) ? pData : (pData ? [pData] : [])
+                                                        setQuickViewPatients(patients)
+                                                        setIsQuickViewOpen(true)
+                                                    }}
+                                                >
+                                                    <PatientAvatar
+                                                        id_animal={Array.isArray(inv.patient_data) ? (inv.patient_data as any)[0].id_animal : (inv.patient_data as any).id_animal}
+                                                        especie={Array.isArray(inv.patient_data) ? (inv.patient_data as any)[0].especie : (inv.patient_data as any).especie}
+                                                        size="sm"
+                                                        className="shadow-sm border-white dark:border-zinc-800"
+                                                    />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-semibold text-zinc-900 group-hover/patient:text-blue-600 transition-colors flex items-center gap-1">
+                                                            {inv.patient_name}
+                                                            {inv.patient_data && <ExternalLink className="h-3 w-3 opacity-0 group-hover/patient:opacity-100 transition-opacity" />}
+                                                        </span>
+                                                        {inv.patient_history_number && (
+                                                            <span className="text-[10px] text-zinc-500 font-mono">ID:{inv.patient_history_number}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-zinc-400 text-xs italic">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-zinc-600">
                                             <div className="flex flex-col">
@@ -340,6 +391,18 @@ export function InvoiceTable() {
                                                     >
                                                         Ver Comprobante
                                                     </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setEditorInvoiceId(inv.id)
+                                                            const pData = inv.patient_data as any
+                                                            const patients = Array.isArray(pData) ? pData : (pData ? [pData] : [])
+                                                            setEditorInitialPatients(patients)
+                                                            setIsEditorOpen(true)
+                                                        }}
+                                                    >
+                                                        Editar Pacientes
+                                                    </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
                                                         className="text-red-600 focus:text-red-600 focus:bg-red-50"
@@ -357,7 +420,7 @@ export function InvoiceTable() {
 
                                     {expandedRows[inv.id] && (
                                         <TableRow className="bg-zinc-50/50 dark:bg-zinc-900/30 border-t-0">
-                                            <TableCell colSpan={6} className="p-0">
+                                            <TableCell colSpan={7} className="p-0">
                                                 <div className="px-12 py-8 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
                                                     <div className="flex flex-col gap-4">
                                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -453,6 +516,24 @@ export function InvoiceTable() {
                     </TableBody>
                 </Table>
             </div>
+            {/* Quick View Modal */}
+            <PatientQuickView
+                isOpen={isQuickViewOpen}
+                onOpenChange={setIsQuickViewOpen}
+                patients={quickViewPatients}
+            />
+            {/* Patient Editor Modal */}
+            {editorInvoiceId && (
+                <PatientEditor
+                    isOpen={isEditorOpen}
+                    onOpenChange={setIsEditorOpen}
+                    invoiceId={editorInvoiceId}
+                    initialPatients={editorInitialPatients}
+                    onSuccess={() => {
+                        fetchInvoices() // Refresh table data
+                    }}
+                />
+            )}
         </div>
     )
 }

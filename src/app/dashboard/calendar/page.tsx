@@ -27,7 +27,9 @@ import {
     CheckCircle,
     XCircle,
     CalendarClock,
-    Calendar as CalendarIcon
+    Calendar as CalendarIcon,
+    User,
+    Edit
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,6 +56,9 @@ import {
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog'
+import { PatientEditor } from '@/components/patients/patient-editor'
+import { VetesoftPatient } from '@/actions/vetesoft'
+import { PatientAvatar } from '@/components/patients/patient-avatar'
 
 interface Invoice {
     id: string
@@ -64,8 +69,11 @@ interface Invoice {
     total_q: number
     pagado_q: number
     observaciones_doctora: string
+
     file_url: string
     invoice_items?: any[]
+    patient_name?: string
+    patient_data?: any
 }
 
 interface Category {
@@ -89,6 +97,12 @@ export default function CalendarPage() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [selectedDay, setSelectedDay] = useState<Date | null>(null)
     const [isDayModalOpen, setIsDayModalOpen] = useState(false)
+
+    // Editor State
+    const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null)
+    const [editorInitialPatients, setEditorInitialPatients] = useState<VetesoftPatient[]>([])
+    const [isEditorOpen, setIsEditorOpen] = useState(false)
+
     const supabase = createClient()
 
     useEffect(() => {
@@ -242,9 +256,14 @@ export default function CalendarPage() {
                                             {format(day, 'd')}
                                         </span>
                                         {dayInvoices.length > 0 && (
-                                            <span className="text-[9px] font-black text-zinc-400 px-1.5 py-0.5 rounded-full uppercase tracking-tighter opacity-60">
-                                                {dayInvoices.length} {dayInvoices.length === 1 ? 'Fact' : 'Facts'}
-                                            </span>
+                                            <div className="flex flex-col items-end text-right">
+                                                <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 leading-none mb-0.5">
+                                                    Q{dayInvoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                                                </span>
+                                                <span className="text-[8px] font-black text-zinc-400 uppercase tracking-tighter opacity-60 leading-none">
+                                                    {dayInvoices.length} {dayInvoices.length === 1 ? 'Fact' : 'Facts'}
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
 
@@ -273,6 +292,19 @@ export default function CalendarPage() {
                                                     </span>
                                                     <span className="font-black whitespace-nowrap">Q{inv.total_q.toFixed(0)}</span>
                                                 </div>
+                                                {inv.patient_name && (
+                                                    <div className="flex items-center gap-1 text-[9px] text-zinc-500 font-medium truncate w-full">
+                                                        {inv.patient_data && (
+                                                            <PatientAvatar
+                                                                id_animal={Array.isArray(inv.patient_data) ? inv.patient_data[0].id_animal : inv.patient_data.id_animal}
+                                                                especie={Array.isArray(inv.patient_data) ? inv.patient_data[0].especie : inv.patient_data.especie}
+                                                                size="xs"
+                                                                className="h-3 w-3 shadow-none border-none"
+                                                            />
+                                                        )}
+                                                        <span className="truncate">{inv.patient_name}</span>
+                                                    </div>
+                                                )}
                                             </button>
                                         ))}
                                     </div>
@@ -284,7 +316,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Footer Monthly Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pb-6">
                 <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Registros</span>
                     <div className="flex items-end gap-2 mt-1">
@@ -294,7 +326,7 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Procedimientos</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Procesos Base</span>
                     <div className="flex items-end gap-2 mt-1">
                         <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">
                             {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.cantidad || 0) : 0), 0) || 0), 0)}
@@ -304,12 +336,20 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Comisionable</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Facturado</span>
                     <div className="flex items-end gap-2 mt-1">
-                        <span className="text-3xl font-black text-blue-600">
+                        <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">
+                            Q {invoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm flex flex-col justify-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Total Comisionable</span>
+                    <div className="flex items-end gap-2 mt-1">
+                        <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
                             Q {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.total_q || 0) : 0), 0) || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
                         </span>
-                        <span className="text-xs font-bold text-zinc-400 mb-1.5">en {MONTHS[currentDate.getMonth()]}</span>
                     </div>
                 </div>
             </div>
@@ -442,6 +482,41 @@ export default function CalendarPage() {
                                             </div>
                                         </div>
                                     )}
+
+                                    <div className="mt-6 flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                        <div className="flex items-center gap-4">
+                                            {selectedInvoice.patient_data && (
+                                                <PatientAvatar
+                                                    id_animal={Array.isArray(selectedInvoice.patient_data) ? selectedInvoice.patient_data[0].id_animal : selectedInvoice.patient_data.id_animal}
+                                                    especie={Array.isArray(selectedInvoice.patient_data) ? selectedInvoice.patient_data[0].especie : selectedInvoice.patient_data.especie}
+                                                    size="md"
+                                                    className="rounded-lg shadow-sm border-white dark:border-zinc-800"
+                                                />
+                                            )}
+                                            <div className="space-y-0.5">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Pacientes Vinculados</p>
+                                                <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                                                    {selectedInvoice.patient_name || 'Sin vincular'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 text-xs font-bold uppercase tracking-widest"
+                                            onClick={() => {
+                                                setEditorInvoiceId(selectedInvoice.id)
+
+                                                const pData = selectedInvoice.patient_data
+                                                const pList = Array.isArray(pData) ? pData : (pData ? [pData] : [])
+
+                                                setEditorInitialPatients(pList)
+                                                setIsEditorOpen(true)
+                                            }}
+                                        >
+                                            <Edit className="h-3 w-3 mr-2" /> Editar
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -537,6 +612,34 @@ export default function CalendarPage() {
                     )}
                 </SheetContent>
             </Sheet>
+            {/* Patient Editor */}
+            {editorInvoiceId && (
+                <PatientEditor
+                    isOpen={isEditorOpen}
+                    onOpenChange={setIsEditorOpen}
+                    invoiceId={editorInvoiceId}
+                    initialPatients={editorInitialPatients}
+                    onSuccess={() => {
+                        fetchMonthInvoices()
+                        // Update selected invoice reference if needed
+                        setInvoices(prev => {
+                            const updated = prev.map(inv => {
+                                if (inv.id === editorInvoiceId) {
+                                    // We can't easily guess the new name without refetching or passing it out
+                                    // The fetchMonthInvoices call above will handle the refresh asynchronously
+                                    return inv
+                                }
+                                return inv
+                            })
+                            return updated
+                        })
+                        // Close drawer to refresh data cleanly or just let it stay open? 
+                        // Better to keep drawer open but we need to update 'selectedInvoice' too.
+                        // For now let's close drawer to avoid stale data issues or fetch specific invoice.
+                        setIsDrawerOpen(false)
+                    }}
+                />
+            )}
         </div>
     )
 }

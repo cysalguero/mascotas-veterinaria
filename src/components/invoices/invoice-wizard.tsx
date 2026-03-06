@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Loader2, CheckCircle, ArrowRight, ArrowLeft, XCircle } from 'lucide-react'
+import { Loader2, CheckCircle, ArrowRight, ArrowLeft, XCircle, Search, User } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
+import { searchPatients } from '@/actions/vetesoft'
+import { PatientAvatar } from '@/components/patients/patient-avatar'
 
 interface N8nResponseItem {
     descripcion: string
@@ -30,6 +32,30 @@ interface Category {
     name: string
 }
 
+interface VetesoftPatient {
+    id_animal: number
+    paciente: string
+    especie: string
+    raza: string
+    nacido: string
+    sexo: string
+    color: string
+    propietario: string
+    documento: string
+    direccion: string
+    telefono: string
+    email: string
+    fec_crea: string
+    // New fields linked to API response
+    es_vacunal?: string
+    es_antipara?: string
+    alert_info?: string
+}
+
+// ----------------------------------------------------------------------
+
+
+
 export function InvoiceWizard() {
     const [step, setStep] = useState<1 | 2 | 3>(1)
     const [isLoading, setIsLoading] = useState(false)
@@ -42,6 +68,16 @@ export function InvoiceWizard() {
     const [userRole, setUserRole] = useState<'admin' | 'doctor' | null>(null)
     const [accountingMonth, setAccountingMonth] = useState<string>('')
     const [accountingYear, setAccountingYear] = useState<string>('')
+
+    // Patient Search State
+    const [patientSearchTerm, setPatientSearchTerm] = useState('')
+    const [searchTermDebounced, setSearchTermDebounced] = useState('')
+    const [isSearchingPatient, setIsSearchingPatient] = useState(false)
+    const [patientResults, setPatientResults] = useState<VetesoftPatient[]>([])
+    const [selectedPatients, setSelectedPatients] = useState<VetesoftPatient[]>([])
+    const [isSkipped, setIsSkipped] = useState(false)
+    const [showPatientResults, setShowPatientResults] = useState(false)
+
     const supabase = createClient()
 
     useEffect(() => {
@@ -87,6 +123,54 @@ export function InvoiceWizard() {
         fetchInitialData()
     }, [])
 
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (patientSearchTerm.length >= 2) {
+                performSearch(patientSearchTerm)
+            } else {
+                setPatientResults([])
+            }
+        }, 800) // 800ms debounce
+
+        return () => clearTimeout(timer)
+    }, [patientSearchTerm])
+
+    const performSearch = async (term: string) => {
+        setIsSearchingPatient(true)
+        try {
+            const results = await searchPatients(term)
+            setPatientResults(results)
+            setShowPatientResults(true)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsSearchingPatient(false)
+        }
+    }
+
+    const addPatient = (patient: VetesoftPatient) => {
+        // Prevent duplicates
+        if (selectedPatients.some(p => p.id_animal === patient.id_animal)) return
+
+        setSelectedPatients(prev => [...prev, patient])
+        setPatientSearchTerm('')
+        setShowPatientResults(false)
+        setIsSkipped(false)
+    }
+
+    const removePatient = (id: number) => {
+        setSelectedPatients(prev => prev.filter(p => p.id_animal !== id))
+    }
+
+    const toggleSkipped = () => {
+        if (!isSkipped) {
+            setSelectedPatients([])
+            setIsSkipped(true)
+        } else {
+            setIsSkipped(false)
+        }
+    }
+
     const handleProcess = async () => {
         setIsLoading(true)
         setError(null)
@@ -94,6 +178,8 @@ export function InvoiceWizard() {
         try {
             if (!url.trim()) throw new Error("⚠️ El link del recibo es obligatorio.")
             if (!observations.trim()) throw new Error("⚠️ Las observaciones son obligatorias.")
+            if (!observations.trim()) throw new Error("⚠️ Las observaciones son obligatorias.")
+            if (selectedPatients.length === 0 && !isSkipped) throw new Error("⚠️ Debes vincular al menos un paciente o seleccionar 'No Aplica'.")
 
             if (url) {
                 const cleanUrl = url.trim()
@@ -156,14 +242,22 @@ export function InvoiceWizard() {
 
             const header = previewData[0]
 
-            // --- VALIDACIÓN DE DÍA ACTUAL ---
+            // --- VALIDACIÓN DE DÍA ACTUAL O AYER ---
             const [invYear, invMonth, invDay] = header.fecha_venta_iso.split('-').map(Number)
-            const now = new Date()
-            const currentYear = now.getFullYear()
-            const currentMonth = now.getMonth() + 1 // getMonth() es 0-index
-            const currentDay = now.getDate()
 
-            const isCurrentDay = invYear === currentYear && invMonth === currentMonth && invDay === currentDay
+            // Fecha de la factura a las 00:00:00 local
+            const invoiceDate = new Date(invYear, invMonth - 1, invDay)
+
+            // Fecha de hoy a las 00:00:00 local
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+
+            // Fecha de ayer a las 00:00:00 local
+            const yesterday = new Date(today)
+            yesterday.setDate(yesterday.getDate() - 1)
+
+            const isToday = invoiceDate.getTime() === today.getTime()
+            const isYesterday = invoiceDate.getTime() === yesterday.getTime()
 
             // Lógica de validación de fechas
             let finalAccountingDate = header.fecha_venta_iso
@@ -177,9 +271,12 @@ export function InvoiceWizard() {
                     finalAccountingDate = `${accountingYear}-${m}-15`
                 }
             } else {
-                // Si es doctor, restringir estrictamente al DÍA actual
-                if (!isCurrentDay) {
-                    throw new Error(`⚠️ No se puede guardar. La factura es del ${invDay}/${invMonth}/${invYear} y hoy es ${currentDay}/${currentMonth}/${currentYear}. Solo puedes registrar facturas del día EXACTO actual.`)
+                // Si es doctor, restringir a HOY o AYER
+                if (!isToday && !isYesterday) {
+                    const currentDay = today.getDate()
+                    const currentMonth = today.getMonth() + 1
+                    const currentYear = today.getFullYear()
+                    throw new Error(`⚠️ No se puede guardar. La factura es del ${invDay}/${invMonth}/${invYear} y hoy es ${currentDay}/${currentMonth}/${currentYear}. Tienes hasta 1 día después de la fecha de la factura para registrarla.`)
                 }
             }
             // --------------------------------
@@ -200,7 +297,21 @@ export function InvoiceWizard() {
                     doctor_id: userData.user.id,
                     observaciones_doctora: header.observaciones_doctora,
                     file_url: url,
-                    fecha_contable: finalAccountingDate // Guardamos la fecha contable
+                    fecha_contable: finalAccountingDate, // Guardamos la fecha contable
+
+                    // Vetesoft Data Integration
+                    // Vetesoft Data Integration (Multi-Patient Logic)
+                    patient_name: selectedPatients.length > 0
+                        ? (selectedPatients.length <= 2
+                            ? selectedPatients.map(p => p.paciente).join(', ')
+                            : `${selectedPatients[0].paciente} + ${selectedPatients.length - 1} más`)
+                        : null,
+                    patient_history_number: selectedPatients.length > 0
+                        ? selectedPatients.map(p => p.id_animal).join(', ')
+                        : null,
+                    patient_data: selectedPatients.length > 0 ? selectedPatients : null,
+                    patient_species: selectedPatients.length > 0 ? selectedPatients[0].especie : null,
+                    patient_owner: selectedPatients.length > 0 ? selectedPatients[0].propietario : null,
                 })
                 .select()
                 .single()
@@ -223,6 +334,24 @@ export function InvoiceWizard() {
 
             if (itemsError) throw itemsError
 
+            // Insert into invoice_patients (New Relational Table)
+            if (selectedPatients.length > 0) {
+                const patientsToInsert = selectedPatients.map(p => ({
+                    invoice_id: invoice.id,
+                    patient_id: p.id_animal.toString(),
+                    patient_name: p.paciente,
+                    patient_species: p.especie,
+                    patient_owner: p.propietario,
+                    patient_data: p
+                }))
+
+                const { error: patientsError } = await supabase
+                    .from('invoice_patients')
+                    .insert(patientsToInsert)
+
+                if (patientsError) throw patientsError
+            }
+
             setStep(3)
         } catch (err: any) {
             setError('Error al guardar en base de datos: ' + err.message)
@@ -237,10 +366,12 @@ export function InvoiceWizard() {
         setObservations('')
         setPreviewData([])
         setSelectedCategories({})
-        setPreviewData([])
-        setSelectedCategories({})
         setAccountingMonth('')
         setAccountingYear('')
+        setPatientSearchTerm('')
+        setPatientResults([])
+        setSelectedPatients([])
+        setIsSkipped(false)
         setError(null)
     }
 
@@ -294,6 +425,138 @@ export function InvoiceWizard() {
                                     className="resize-none min-h-[100px] bg-zinc-50/50 border-zinc-200 focus:border-zinc-400 focus:ring-0 text-sm"
                                 />
                             </div>
+
+                            {/* Buscador de Pacientes Vetesoft - PREMIUM UI */}
+                            <div className="pt-6 border-t border-dashed border-zinc-200 dark:border-zinc-800 animate-in fade-in slide-in-from-bottom-2 duration-700 delay-100">
+                                <Label className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-indigo-100 dark:bg-indigo-900/50 p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400">
+                                            <User size={18} />
+                                        </div>
+                                        <span>Vincular Paciente</span>
+                                        <span className="text-red-500">*</span>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={toggleSkipped}
+                                        className={`text-xs font-bold border-dashed ${isSkipped
+                                            ? 'bg-zinc-100 text-zinc-900 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100'
+                                            : 'text-zinc-400 border-zinc-200 hover:border-zinc-300 dark:border-zinc-800'}`}
+                                    >
+                                        {isSkipped ? 'Habilitar Vinculación' : 'No Aplica'}
+                                    </Button>
+                                </Label>
+
+                                {/* Selected Patients List (Chips) */}
+                                {selectedPatients.length > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 animate-in slide-in-from-bottom-2">
+                                        {selectedPatients.map(patient => (
+                                            <div key={patient.id_animal} className="relative overflow-hidden bg-white dark:bg-zinc-900 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm group">
+                                                <div className="p-3 flex items-center gap-3">
+                                                    <PatientAvatar
+                                                        id_animal={patient.id_animal}
+                                                        especie={patient.especie}
+                                                        size="md"
+                                                        className="rounded-lg shadow-sm border border-black/5"
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate">{patient.paciente}</h4>
+                                                        <p className="text-[10px] text-zinc-500 truncate">{patient.propietario} • ID:{patient.id_animal}</p>
+                                                    </div>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => removePatient(patient.id_animal)}
+                                                        className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    >
+                                                        <XCircle size={16} />
+                                                    </Button>
+                                                </div>
+                                                {/* Status Bar */}
+                                                <div className={`h-1 w-full ${patient.es_vacunal?.toLowerCase().includes('no') ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {!isSkipped && (
+                                    <div className="relative group z-20">
+                                        <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl opacity-20 group-hover:opacity-40 transition duration-500 blur-sm"></div>
+                                        <div className="relative bg-white dark:bg-zinc-950 rounded-xl flex items-center shadow-sm">
+                                            <Search className="absolute left-4 top-3.5 h-5 w-5 text-zinc-400 group-hover:text-indigo-500 transition-colors duration-300" />
+                                            <Input
+                                                placeholder="Buscar por Nombre, Dueño o ID..."
+                                                value={patientSearchTerm}
+                                                onChange={e => setPatientSearchTerm(e.target.value)}
+                                                onFocus={() => {
+                                                    if (patientSearchTerm.length >= 2) setShowPatientResults(true)
+                                                }}
+                                                className="pl-12 h-12 bg-transparent border-zinc-200 focus:border-transparent focus:ring-0 text-base rounded-xl transition-all font-medium placeholder:text-zinc-400/80"
+                                            />
+                                            {isSearchingPatient && (
+                                                <div className="absolute right-4 top-3.5 animate-spin text-indigo-500">
+                                                    <Loader2 className="h-5 w-5" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Dropdown Results */}
+                                        {showPatientResults && patientResults.length > 0 && (
+                                            <div className="absolute top-14 left-0 w-full bg-white/90 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200/50 dark:border-zinc-800 rounded-xl shadow-2xl max-h-[320px] overflow-y-auto z-50 p-2 space-y-1 custom-scrollbar animate-in zoom-in-95 duration-200">
+                                                <div className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 sticky top-0 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm z-10 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                                                    Resultados encontrados
+                                                </div>
+                                                {patientResults.map((patient) => {
+                                                    const isSelected = selectedPatients.some(p => p.id_animal === patient.id_animal)
+                                                    return (
+                                                        <div
+                                                            key={patient.id_animal}
+                                                            onClick={() => !isSelected && addPatient(patient)}
+                                                            className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all duration-200 group/item border border-transparent 
+                                                                ${isSelected
+                                                                    ? 'opacity-50 cursor-not-allowed bg-zinc-50 dark:bg-zinc-900'
+                                                                    : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-100 dark:hover:border-indigo-900/30'}`}
+                                                        >
+                                                            <PatientAvatar
+                                                                id_animal={patient.id_animal}
+                                                                especie={patient.especie}
+                                                                size="lg"
+                                                                className="shadow-sm border border-black/5"
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center justify-between">
+                                                                    <p className="font-bold text-zinc-800 dark:text-zinc-100 group-hover/item:text-indigo-700 dark:group-hover/item:text-indigo-300 truncate">
+                                                                        {patient.paciente}
+                                                                    </p>
+                                                                    <span className="text-[10px] font-mono font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                                                        ID:{patient.id_animal}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate flex items-center gap-1">
+                                                                    <User size={10} />
+                                                                    {patient.propietario}
+                                                                    <span className="mx-1 text-zinc-300">•</span>
+                                                                    {patient.raza}
+                                                                </p>
+                                                            </div>
+                                                            {isSelected && <CheckCircle size={16} className="text-zinc-300" />}
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {isSkipped && (
+                                    <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center animate-in fade-in zoom-in-95">
+                                        <p className="text-sm font-medium text-zinc-500">
+                                            No se vinculará ningún paciente a esta factura.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -313,6 +576,31 @@ export function InvoiceWizard() {
                                     <p className="text-3xl font-black text-blue-600 dark:text-blue-400">Q{previewData[0]?.total_q_factura?.toFixed(2)}</p>
                                 </div>
                             </div>
+
+                            {/* Mostrar Paciente Seleccionado en Paso 2 también (Read Only) */}
+                            {/* Mostrar Pacientes Seleccionados en Paso 2 también (Read Only) */}
+                            {selectedPatients.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-xs font-black uppercase text-zinc-400 tracking-wider">Pacientes Vinculados</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {selectedPatients.map(p => (
+                                            <div key={p.id_animal} className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                                                <PatientAvatar
+                                                    id_animal={p.id_animal}
+                                                    especie={p.especie}
+                                                    size="sm"
+                                                    className="shadow-sm border border-black/5"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{p.paciente}</p>
+                                                    <p className="text-[10px] text-zinc-500 truncate">ID #{p.id_animal}</p>
+                                                </div>
+                                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="border rounded-md overflow-x-auto bg-white dark:bg-zinc-900 shadow-sm">
                                 <Table>

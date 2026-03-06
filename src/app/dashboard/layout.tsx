@@ -30,6 +30,11 @@ const analysisItems = [
         href: '/dashboard/metrics',
         icon: LayoutDashboard,
     },
+    {
+        title: 'Análisis de Pagos',
+        href: '/dashboard/payments',
+        icon: PieChart,
+    },
 ]
 
 const operationsItems = [
