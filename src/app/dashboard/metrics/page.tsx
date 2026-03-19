@@ -390,15 +390,15 @@ export default function MetricsPage() {
                                             {/* Logic: $100 bonus for every 30k */}
                                             Has acumulado <span className="text-green-600 font-bold">$ {Math.floor(stats.totalIncome / 30000) * 100} USD</span> en bonos.
                                             {stats.totalIncome % 30000 !== 0 && (
-                                                <> Te faltan <span className="text-zinc-900 font-bold">Q {(30000 - (stats.totalIncome % 30000)).toLocaleString('es-GT', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span> para el siguiente bono.</>
+                                                <> Te faltan <span className="text-zinc-900 font-bold">Q {(30000 - (stats.totalIncome % 30000)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span> para el siguiente bono.</>
                                             )}
                                         </p>
                                     </div>
                                     <div className="text-right">
                                         <span className="text-3xl font-black text-zinc-900 dark:text-zinc-100">
-                                            Q {stats.totalIncome.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                            Q {stats.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                         </span>
-                                        <span className="text-sm font-black text-zinc-400 ml-2 italic">/ Siguiente: Q {((Math.floor(stats.totalIncome / 30000) + 1) * 30000).toLocaleString('es-GT')}</span>
+                                        <span className="text-sm font-black text-zinc-400 ml-2 italic">/ Siguiente: Q {((Math.floor(stats.totalIncome / 30000) + 1) * 30000).toLocaleString('en-US')}</span>
                                     </div>
                                 </div>
 
@@ -414,9 +414,9 @@ export default function MetricsPage() {
                                 </div>
 
                                 <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                                    <span>Q {(Math.floor(stats.totalIncome / 30000) * 30000).toLocaleString('es-GT')}</span>
+                                    <span>Q {(Math.floor(stats.totalIncome / 30000) * 30000).toLocaleString('en-US')}</span>
                                     <span>{((stats.totalIncome % 30000) / 30000 * 100).toFixed(0)}% DEL HITO ACTUAL</span>
-                                    <span>Q {((Math.floor(stats.totalIncome / 30000) + 1) * 30000).toLocaleString('es-GT')}</span>
+                                    <span>Q {((Math.floor(stats.totalIncome / 30000) + 1) * 30000).toLocaleString('en-US')}</span>
                                 </div>
                             </div>
                         </Card>
@@ -443,10 +443,10 @@ export default function MetricsPage() {
                                             Q {
                                                 currentDate.getMonth() === new Date().getMonth()
                                                     ? (new Date().getDate() <= 5
-                                                        ? (stats.prevMonthIncome || stats.totalIncome).toLocaleString('es-GT', { maximumFractionDigits: 0 })
-                                                        : ((stats.totalIncome / Math.max(new Date().getDate(), 1)) * endOfMonth(currentDate).getDate()).toLocaleString('es-GT', { maximumFractionDigits: 0 })
+                                                        ? (stats.prevMonthIncome || stats.totalIncome).toLocaleString('en-US', { maximumFractionDigits: 0 })
+                                                        : ((stats.totalIncome / Math.max(new Date().getDate(), 1)) * endOfMonth(currentDate).getDate()).toLocaleString('en-US', { maximumFractionDigits: 0 })
                                                     )
-                                                    : stats.totalIncome.toLocaleString('es-GT', { maximumFractionDigits: 0 })
+                                                    : stats.totalIncome.toLocaleString('en-US', { maximumFractionDigits: 0 })
                                             }
                                         </h4>
                                     </div>
@@ -465,8 +465,8 @@ export default function MetricsPage() {
                                             </p>
                                             <p className="mt-1 text-lg font-black text-blue-600">
                                                 Q {currentDate.getMonth() === new Date().getMonth()
-                                                    ? (stats.totalIncome / Math.max(new Date().getDate(), 1)).toLocaleString('es-GT', { maximumFractionDigits: 0 })
-                                                    : (stats.totalIncome / endOfMonth(currentDate).getDate()).toLocaleString('es-GT', { maximumFractionDigits: 0 })
+                                                    ? (stats.totalIncome / Math.max(new Date().getDate(), 1)).toLocaleString('en-US', { maximumFractionDigits: 0 })
+                                                    : (stats.totalIncome / endOfMonth(currentDate).getDate()).toLocaleString('en-US', { maximumFractionDigits: 0 })
                                                 } <span className="text-xs text-zinc-400 font-medium">/ día</span>
                                             </p>
                                         </>
@@ -486,7 +486,7 @@ export default function MetricsPage() {
                             {[
                                 {
                                     title: `Facturado en ${MONTHS[currentDate.getMonth()]}`,
-                                    value: `Q ${(stats.totalGrossIncome || 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}`,
+                                    value: `Q ${(stats.totalGrossIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
                                     icon: DollarSign,
                                     color: 'text-zinc-600 dark:text-zinc-400',
                                     bg: 'bg-zinc-100 dark:bg-zinc-800',
@@ -494,7 +494,7 @@ export default function MetricsPage() {
                                 },
                                 {
                                     title: `Comisionable ${MONTHS[currentDate.getMonth()]}`,
-                                    value: `Q ${stats.totalIncome.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`,
+                                    value: `Q ${stats.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
                                     icon: DollarSign,
                                     color: 'text-blue-600',
                                     bg: 'bg-blue-50',
@@ -502,7 +502,7 @@ export default function MetricsPage() {
                                 },
                                 {
                                     title: 'Procedimientos',
-                                    value: stats.totalProcedures.toLocaleString('es-GT'),
+                                    value: stats.totalProcedures.toLocaleString('en-US'),
                                     icon: ShoppingBag,
                                     color: 'text-green-600',
                                     bg: 'bg-green-50',
@@ -510,7 +510,7 @@ export default function MetricsPage() {
                                 },
                                 {
                                     title: 'Clientes Atendidos',
-                                    value: stats.totalCustomers.toLocaleString('es-GT'),
+                                    value: stats.totalCustomers.toLocaleString('en-US'),
                                     icon: Users,
                                     color: 'text-purple-600',
                                     bg: 'bg-purple-50',
@@ -518,7 +518,7 @@ export default function MetricsPage() {
                                 },
                                 {
                                     title: 'Ticket Promedio',
-                                    value: `Q ${(stats.totalIncome / (stats.totalCustomers || 1)).toLocaleString('es-GT', { minimumFractionDigits: 2 })}`,
+                                    value: `Q ${(stats.totalIncome / (stats.totalCustomers || 1)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
                                     icon: TrendingUp,
                                     color: 'text-orange-600',
                                     bg: 'bg-orange-50',
@@ -612,7 +612,7 @@ export default function MetricsPage() {
                                                     fontWeight: '900',
                                                     padding: '12px 20px'
                                                 }}
-                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Ingreso']}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Ingreso']}
                                             />
                                             <Area
                                                 type="monotone"
@@ -660,7 +660,7 @@ export default function MetricsPage() {
                                                     fontWeight: '900',
                                                     padding: '12px 20px'
                                                 }}
-                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Total']}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Total']}
                                             />
                                             <Legend
                                                 verticalAlign="bottom"
@@ -703,7 +703,7 @@ export default function MetricsPage() {
                                                     boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)',
                                                     fontWeight: '900'
                                                 }}
-                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Monto']}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Monto']}
                                             />
                                             <Bar dataKey="value" fill="#18181b" radius={[12, 12, 0, 0]} barSize={50} />
                                         </BarChart>
@@ -742,10 +742,10 @@ export default function MetricsPage() {
                                                             </span>
                                                         </td>
                                                         <td className="px-8 py-6 text-right">
-                                                            <span className="text-xs font-black text-zinc-400">{p.count.toLocaleString('es-GT')}</span>
+                                                            <span className="text-xs font-black text-zinc-400">{p.count.toLocaleString('en-US')}</span>
                                                         </td>
                                                         <td className="px-8 py-6 text-right">
-                                                            <span className="text-sm font-black text-blue-700 dark:text-blue-400">Q {p.revenue.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                            <span className="text-sm font-black text-blue-700 dark:text-blue-400">Q {p.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -792,7 +792,7 @@ export default function MetricsPage() {
                                                     fontWeight: '900',
                                                     padding: '12px 20px'
                                                 }}
-                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Total']}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Total']}
                                             />
                                             <Legend
                                                 verticalAlign="bottom"

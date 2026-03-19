@@ -215,7 +215,7 @@ export default function SettlementsHistoryPage() {
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Liquidado (Q)</p>
                             <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
-                                Q {settlements.reduce((acc, s) => acc + s.total_quetzales, 0).toLocaleString('es-GT')}
+                                Q {settlements.reduce((acc, s) => acc + s.total_quetzales, 0).toLocaleString('en-US')}
                             </p>
                         </div>
                     </CardContent>
@@ -228,7 +228,7 @@ export default function SettlementsHistoryPage() {
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Comisiones (Q)</p>
                             <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
-                                Q {settlements.reduce((acc, s) => acc + s.comision_quetzales, 0).toLocaleString('es-GT')}
+                                Q {settlements.reduce((acc, s) => acc + s.comision_quetzales, 0).toLocaleString('en-US')}
                             </p>
                         </div>
                     </CardContent>

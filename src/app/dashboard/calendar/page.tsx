@@ -29,8 +29,18 @@ import {
     CalendarClock,
     Calendar as CalendarIcon,
     User,
-    Edit
+    Edit,
+    Trash2,
+    MoreHorizontal
 } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import {
     Sheet,
@@ -141,6 +151,30 @@ export default function CalendarPage() {
 
     const handleYearChange = (year: number) => {
         setCurrentDate(setYear(currentDate, year))
+    }
+
+    const deleteInvoice = async (id: string) => {
+        if (!confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) return
+
+        try {
+            const { error } = await supabase
+                .from('invoices')
+                .delete()
+                .eq('id', id)
+
+            if (error) throw error
+            
+            // Remove from local state
+            setInvoices(prev => prev.filter(inv => inv.id !== id))
+            
+            // If the deleted invoice is currently selected in the Drawer, close it
+            if (selectedInvoice?.id === id) {
+                setIsDrawerOpen(false)
+            }
+        } catch (error) {
+            console.error('Error deleting invoice:', error)
+            alert('Error al eliminar la factura.')
+        }
     }
 
     const monthStart = startOfMonth(currentDate)
@@ -258,7 +292,7 @@ export default function CalendarPage() {
                                         {dayInvoices.length > 0 && (
                                             <div className="flex flex-col items-end text-right">
                                                 <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 leading-none mb-0.5">
-                                                    Q{dayInvoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                                                    Q{dayInvoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                                                 </span>
                                                 <span className="text-[8px] font-black text-zinc-400 uppercase tracking-tighter opacity-60 leading-none">
                                                     {dayInvoices.length} {dayInvoices.length === 1 ? 'Fact' : 'Facts'}
@@ -339,7 +373,7 @@ export default function CalendarPage() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Facturado</span>
                     <div className="flex items-end gap-2 mt-1">
                         <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">
-                            Q {invoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                            Q {invoices.reduce((acc, inv) => acc + (inv.total_q || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                         </span>
                     </div>
                 </div>
@@ -348,7 +382,7 @@ export default function CalendarPage() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Total Comisionable</span>
                     <div className="flex items-end gap-2 mt-1">
                         <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
-                            Q {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.total_q || 0) : 0), 0) || 0), 0).toLocaleString('es-GT', { maximumFractionDigits: 0 })}
+                            Q {invoices.reduce((acc, inv) => acc + (inv.invoice_items?.reduce((iAcc, item) => iAcc + (item.comisionable ? (item.total_q || 0) : 0), 0) || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                         </span>
                     </div>
                 </div>
@@ -369,17 +403,23 @@ export default function CalendarPage() {
                     {selectedDay && (
                         <div className="space-y-6 mt-4">
                             {/* Daily Summary */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Facturado Hoy</p>
-                                    <p className="text-2xl font-black text-blue-600">
-                                        Q {getInvoicesForDay(selectedDay).reduce((acc, inv) => acc + inv.total_q, 0).toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70">Facturado Hoy</p>
+                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                                        Q {getInvoicesForDay(selectedDay).reduce((acc, inv) => acc + inv.total_q, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
-                                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Registros</p>
-                                    <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
-                                        {getInvoicesForDay(selectedDay).length}
+                                <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600/70 dark:text-indigo-400/70">Comisionable Hoy</p>
+                                    <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                                        Q {getInvoicesForDay(selectedDay).reduce((acc, inv) => acc + (inv.invoice_items?.filter(i => i.comisionable).reduce((sum, i) => sum + (i.total_q || 0), 0) || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                                <div className="bg-orange-50/50 dark:bg-orange-900/10 p-3 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-orange-600/70 dark:text-orange-400/70">No Comis. Hoy</p>
+                                    <p className="text-xl font-black text-orange-600 dark:text-orange-400">
+                                        Q {getInvoicesForDay(selectedDay).reduce((acc, inv) => acc + (inv.invoice_items?.filter(i => !i.comisionable).reduce((sum, i) => sum + (i.total_q || 0), 0) || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
                             </div>
@@ -423,15 +463,72 @@ export default function CalendarPage() {
                                                             {isDifferentDate ? <CalendarClock size={18} /> : <Tag size={18} />}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold">Ticket #{inv.ticket_numero}</p>
+                                                            <p className="font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                                                                Ticket #{inv.ticket_numero}
+                                                                {inv.patient_name && (
+                                                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                                                        {inv.patient_name}
+                                                                    </span>
+                                                                )}
+                                                            </p>
                                                             <p className="text-xs opacity-70 font-medium">{inv.invoice_items?.length || 0} items • {inv.forma_pago}</p>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <p className="font-black">Q {inv.total_q.toFixed(2)}</p>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
-                                                            {isDifferentDate ? 'Contabilidad Diferida' : isPaid(inv) ? 'Pagado' : 'Pendiente'}
-                                                        </p>
+                                                    <div className="flex items-center gap-4 text-right">
+                                                        <div>
+                                                            <p className="font-black">Q {inv.total_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                            {(() => {
+                                                                const comisTotal = inv.invoice_items?.filter(i => i.comisionable).reduce((acc, i) => acc + (i.total_q || 0), 0) || 0;
+                                                                const nonComisTotal = inv.invoice_items?.filter(i => !i.comisionable).reduce((acc, i) => acc + (i.total_q || 0), 0) || 0;
+                                                                if (comisTotal > 0 || nonComisTotal > 0) {
+                                                                    return (
+                                                                        <div className="flex gap-1 mt-1 justify-end">
+                                                                            {comisTotal > 0 && <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded-sm">Q{comisTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} C</span>}
+                                                                            {nonComisTotal > 0 && <span className="text-[9px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded-sm">Q{nonComisTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} N/C</span>}
+                                                                        </div>
+                                                                    )
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">
+                                                                {isDifferentDate ? 'Contabilidad Diferida' : isPaid(inv) ? 'Pagado' : 'Pendiente'}
+                                                            </p>
+                                                        </div>
+                                                        <div onClick={(e) => e.stopPropagation()}>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                        <MoreHorizontal className="h-4 w-4" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => window.open(inv.file_url, '_blank')}
+                                                                    >
+                                                                        <ExternalLink className="mr-2 h-4 w-4" /> Ver Comprobante
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => {
+                                                                            setEditorInvoiceId(inv.id)
+                                                                            const pData = inv.patient_data as any
+                                                                            const patients = Array.isArray(pData) ? pData : (pData ? [pData] : [])
+                                                                            setEditorInitialPatients(patients)
+                                                                            setIsEditorOpen(true)
+                                                                        }}
+                                                                    >
+                                                                        <Edit className="mr-2 h-4 w-4" /> Editar Pacientes
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem
+                                                                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                                                        onClick={() => deleteInvoice(inv.id)}
+                                                                    >
+                                                                        <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -533,7 +630,7 @@ export default function CalendarPage() {
                                     </div>
                                     <div className="bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-2 shadow-sm">
                                         <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Total Facturado</span>
-                                        <p className="text-3xl font-black text-blue-600">Q{selectedInvoice.total_q.toFixed(2)}</p>
+                                        <p className="text-3xl font-black text-blue-600">Q{selectedInvoice.total_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
 
@@ -577,7 +674,7 @@ export default function CalendarPage() {
                                                             {item.cantidad}
                                                         </TableCell>
                                                         <TableCell className="text-right text-sm font-black text-zinc-900 dark:text-zinc-100 py-4 px-6">
-                                                            Q{item.total_q.toFixed(2)}
+                                                            Q{item.total_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}

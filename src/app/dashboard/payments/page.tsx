@@ -251,7 +251,7 @@ export default function PaymentsAnalysisPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-0.5 text-[10px]">Total Facturado</p>
-                                        <p className="text-3xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Q {stats.totalBilled.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</p>
+                                        <p className="text-3xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Q {stats.totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
                             </Card>
@@ -266,7 +266,7 @@ export default function PaymentsAnalysisPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-0.5 text-[10px]">Cancelado Totalmente</p>
-                                        <p className="text-3xl font-black text-emerald-700 dark:text-emerald-400 tracking-tight">Q {stats.totalPaid.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</p>
+                                        <p className="text-3xl font-black text-emerald-700 dark:text-emerald-400 tracking-tight">Q {stats.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                                     </div>
                                     <div className="pt-3 border-t border-emerald-200 dark:border-emerald-900/50 flex justify-between">
                                         <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500">{stats.fullyPaidCount} facturas</p>
@@ -285,7 +285,7 @@ export default function PaymentsAnalysisPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs font-bold uppercase tracking-widest text-red-600 mb-0.5 text-[10px]">Cancelado Parcialmente</p>
-                                        <p className="text-3xl font-black text-red-700 dark:text-red-400 tracking-tight">Q {stats.totalPending.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</p>
+                                        <p className="text-3xl font-black text-red-700 dark:text-red-400 tracking-tight">Q {stats.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                                     </div>
                                     <div className="pt-3 border-t border-red-200 dark:border-red-900/50 flex justify-between">
                                         <p className="text-[10px] font-bold text-red-600 dark:text-red-500">{stats.partiallyPaidCount} facturas</p>
@@ -329,7 +329,7 @@ export default function PaymentsAnalysisPage() {
                                                     fontWeight: '900',
                                                     padding: '12px 20px'
                                                 }}
-                                                formatter={(v: number) => [`Q ${v.toLocaleString('es-GT', { minimumFractionDigits: 2 })}`, 'Monto']}
+                                                formatter={(v: number) => [`Q ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Monto']}
                                             />
                                             <Legend
                                                 verticalAlign="bottom"
@@ -420,17 +420,17 @@ export default function PaymentsAnalysisPage() {
                                                             </td>
                                                             <td className="px-6 py-4">
                                                                 <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-                                                                    Q {inv.total_q.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                                                    Q {inv.total_q.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                                                 </span>
                                                             </td>
                                                             <td className="px-6 py-4">
                                                                 <span className="font-bold text-sm text-emerald-600 dark:text-emerald-500">
-                                                                    Q {inv.pagado_q.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                                                    Q {inv.pagado_q.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                                                 </span>
                                                             </td>
                                                             <td className="px-6 py-4 text-right">
                                                                 <span className="font-black text-sm text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-md">
-                                                                    Q {deubt.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                                                    Q {deubt.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                                                 </span>
                                                             </td>
                                                             <td className="px-6 py-4 text-right">

@@ -418,7 +418,7 @@ export default function SettlementsPage() {
                         <CardContent className="p-8 space-y-4 text-center">
                             <Wallet className="h-12 w-12 mx-auto opacity-50 mb-2" />
                             <h3 className="text-xl font-black tracking-tight">Ventas Comisionables</h3>
-                            <p className="text-3xl font-black">Q {commissionableIncome.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-3xl font-black">Q {commissionableIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                             <p className="text-xs font-bold uppercase tracking-widest opacity-70">Detectadas para este mes</p>
                         </CardContent>
                     </Card>
@@ -460,7 +460,7 @@ export default function SettlementsPage() {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-xl font-black text-zinc-900 dark:text-zinc-100">$ {proratedSalaryUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs font-bold text-zinc-400">Q {(proratedSalaryUsd * exchangeRate).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xs font-bold text-zinc-400">Q {(proratedSalaryUsd * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between p-6 bg-zinc-50 dark:bg-zinc-900 rounded-3xl group transition-all hover:bg-zinc-100/50">
@@ -470,12 +470,12 @@ export default function SettlementsPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-black text-blue-600 dark:text-blue-400 uppercase tracking-tighter">Comisiones (5%)</p>
-                                            <p className="text-xs font-bold text-zinc-400">Sobre Q {commissionableIncome.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                            <p className="text-xs font-bold text-zinc-400">Sobre Q {commissionableIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-xl font-black text-blue-700 dark:text-blue-400">$ {commissionUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs font-bold text-zinc-400">Q {commissionQuetzales.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xs font-bold text-zinc-400">Q {commissionQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
 
@@ -492,7 +492,7 @@ export default function SettlementsPage() {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-xl font-black text-green-700 dark:text-green-400">+$ {metaBonusUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                            <p className="text-xs font-bold text-green-600/50">Q {(metaBonusUsd * exchangeRate).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                            <p className="text-xs font-bold text-green-600/50">Q {(metaBonusUsd * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                         </div>
                                     </div>
                                 )}
@@ -505,7 +505,7 @@ export default function SettlementsPage() {
                                 </h4>
                                 <div className="h-px w-24 bg-white/20 dark:bg-zinc-200 my-2" />
                                 <p className="text-2xl font-black text-blue-400 dark:text-blue-600">
-                                    Q {totalToPayQuetzales.toLocaleString('es-GT', { minimumFractionDigits: 2 })}
+                                    Q {totalToPayQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                 </p>
                             </div>
 

@@ -25,6 +25,7 @@ interface N8nResponseItem {
     pagado_q: number
     cambio_q: number
     observaciones_doctora: string
+    cantidad_comisionable?: number // Added for partial commissionable quantities
 }
 
 interface Category {
@@ -68,6 +69,7 @@ export function InvoiceWizard() {
     const [userRole, setUserRole] = useState<'admin' | 'doctor' | null>(null)
     const [accountingMonth, setAccountingMonth] = useState<string>('')
     const [accountingYear, setAccountingYear] = useState<string>('')
+    const [dateOverride, setDateOverride] = useState<{ active: boolean, allowed_date: string | null, expires_at: string | null } | null>(null)
 
     // Patient Search State
     const [patientSearchTerm, setPatientSearchTerm] = useState('')
@@ -99,6 +101,17 @@ export function InvoiceWizard() {
                     role = 'admin'
                 }
                 setUserRole((role as 'admin' | 'doctor') || 'doctor')
+            }
+
+            // Fetch Date Override Settings
+            const { data: settingsData } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'invoice_date_override')
+                .maybeSingle()
+            
+            if (settingsData && settingsData.value) {
+                setDateOverride(settingsData.value as any)
             }
 
             const { data: catData, error: catError } = await supabase
@@ -208,11 +221,13 @@ export function InvoiceWizard() {
             }
 
             const data: N8nResponseItem[] = await response.json()
-            if (!Array.isArray(data) || data.length === 0) {
-                throw new Error('No se detectaron ítems en el recibo.')
-            }
+            // Initialize cantidad_comisionable based on the original comisionable flag
+            const dataWithComisionableQty = data.map(item => ({
+                ...item,
+                cantidad_comisionable: item.comisionable ? item.cantidad : 0
+            }))
 
-            setPreviewData(data)
+            setPreviewData(dataWithComisionableQty)
             setSelectedCategories({})
             setStep(2)
         } catch (err: any) {
@@ -226,6 +241,17 @@ export function InvoiceWizard() {
         setSelectedCategories(prev => ({
             ...prev,
             [index]: categoryId
+        }))
+    }
+
+    const handleCantidadComisionableChange = (index: number, value: number) => {
+        setPreviewData(prev => prev.map((item, i) => {
+            if (i === index) {
+                // Ensure value is between 0 and total cantidad
+                const validValue = Math.max(0, Math.min(item.cantidad, value))
+                return { ...item, cantidad_comisionable: validValue, comisionable: validValue > 0 }
+            }
+            return item
         }))
     }
 
@@ -271,11 +297,21 @@ export function InvoiceWizard() {
                     finalAccountingDate = `${accountingYear}-${m}-15`
                 }
             } else {
-                // Si es doctor, restringir a HOY o AYER
-                if (!isToday && !isYesterday) {
+                // Si es doctor, restringir a HOY o AYER, a menos que haya permiso especial activo
+                const isOverrideValid = dateOverride?.active 
+                    && dateOverride.expires_at 
+                    && new Date() < new Date(dateOverride.expires_at)
+                    && dateOverride.allowed_date === header.fecha_venta_iso;
+
+                if (!isToday && !isYesterday && !isOverrideValid) {
                     const currentDay = today.getDate()
                     const currentMonth = today.getMonth() + 1
                     const currentYear = today.getFullYear()
+                    
+                    if (dateOverride?.active && new Date() < new Date(dateOverride.expires_at!)) {
+                        throw new Error(`⚠️ No se puede guardar. Fecha no válida. Actualmente el administrador ha habilitado subir facturas únicamente para el día: ${dateOverride.allowed_date}.`)
+                    }
+
                     throw new Error(`⚠️ No se puede guardar. La factura es del ${invDay}/${invMonth}/${invYear} y hoy es ${currentDay}/${currentMonth}/${currentYear}. Tienes hasta 1 día después de la fecha de la factura para registrarla.`)
                 }
             }
@@ -318,15 +354,39 @@ export function InvoiceWizard() {
 
             if (invoiceError) throw invoiceError
 
-            const itemsToInsert = previewData.map((item, idx) => ({
-                invoice_id: invoice.id,
-                descripcion: item.descripcion,
-                cantidad: item.cantidad,
-                precio_unitario_q: item.precio_unitario_q,
-                total_q: item.total_q,
-                comisionable: item.comisionable,
-                categoria_id: selectedCategories[idx] || null
-            }))
+            const itemsToInsert: any[] = []
+
+            previewData.forEach((item, idx) => {
+                const baseItem = {
+                    invoice_id: invoice.id,
+                    descripcion: item.descripcion,
+                    precio_unitario_q: item.precio_unitario_q,
+                    categoria_id: selectedCategories[idx] || null
+                }
+
+                const comisionableQty = typeof item.cantidad_comisionable === 'number' ? item.cantidad_comisionable : (item.comisionable ? item.cantidad : 0)
+                const nonComisionableQty = item.cantidad - comisionableQty
+
+                // Si hay cantidad comisionable, creamos esa fila
+                if (comisionableQty > 0) {
+                    itemsToInsert.push({
+                        ...baseItem,
+                        cantidad: comisionableQty,
+                        total_q: Number((comisionableQty * item.precio_unitario_q).toFixed(2)),
+                        comisionable: true
+                    })
+                }
+
+                // Si quedó alguna cantidad no comisionable, creamos esa fila también
+                if (nonComisionableQty > 0) {
+                    itemsToInsert.push({
+                        ...baseItem,
+                        cantidad: nonComisionableQty,
+                        total_q: Number((nonComisionableQty * item.precio_unitario_q).toFixed(2)),
+                        comisionable: false
+                    })
+                }
+            })
 
             const { error: itemsError } = await supabase
                 .from('invoice_items')
@@ -573,7 +633,7 @@ export function InvoiceWizard() {
                                 </div>
                                 <div className="bg-white dark:bg-zinc-950 p-6 rounded-xl border shadow-sm text-center space-y-2">
                                     <span className="text-xs text-blue-500 font-bold uppercase tracking-wider">Total</span>
-                                    <p className="text-3xl font-black text-blue-600 dark:text-blue-400">Q{previewData[0]?.total_q_factura?.toFixed(2)}</p>
+                                    <p className="text-3xl font-black text-blue-600 dark:text-blue-400">Q{previewData[0]?.total_q_factura?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                 </div>
                             </div>
 
@@ -606,10 +666,10 @@ export function InvoiceWizard() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-zinc-50/50 dark:bg-zinc-900/50">
-                                            <TableHead className="w-[35%]">Descripción</TableHead>
-                                            <TableHead className="text-center w-[120px]">Comis.</TableHead>
+                                            <TableHead className="w-[30%]">Descripción</TableHead>
+                                            <TableHead className="text-center w-[110px]">Total Uds.</TableHead>
+                                            <TableHead className="text-center w-[120px]">Cant. Comis.</TableHead>
                                             <TableHead className="w-[200px]">Categoría <span className="text-red-500">*</span></TableHead>
-                                            <TableHead className="text-right">Cant.</TableHead>
                                             <TableHead className="text-right">P. Unit</TableHead>
                                             <TableHead className="text-right">Total</TableHead>
                                         </TableRow>
@@ -618,12 +678,18 @@ export function InvoiceWizard() {
                                         {previewData.map((item, idx) => (
                                             <TableRow key={idx} className="hover:bg-zinc-50/50 transition-colors">
                                                 <TableCell className="font-medium text-zinc-700 dark:text-zinc-300">{item.descripcion}</TableCell>
+                                                <TableCell className="text-center font-bold">{item.cantidad}</TableCell>
                                                 <TableCell className="text-center">
-                                                    {item.comisionable ? (
-                                                        <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
-                                                    ) : (
-                                                        <XCircle className="h-5 w-5 text-red-500 mx-auto opacity-50" />
-                                                    )}
+                                                    <div className="flex items-center justify-center">
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            max={item.cantidad}
+                                                            value={item.cantidad_comisionable ?? (item.comisionable ? item.cantidad : 0)}
+                                                            onChange={(e) => handleCantidadComisionableChange(idx, parseInt(e.target.value) || 0)}
+                                                            className="w-16 h-8 text-center"
+                                                        />
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <select
@@ -637,7 +703,6 @@ export function InvoiceWizard() {
                                                         ))}
                                                     </select>
                                                 </TableCell>
-                                                <TableCell className="text-right">{item.cantidad}</TableCell>
                                                 <TableCell className="text-right">Q{item.precio_unitario_q}</TableCell>
                                                 <TableCell className="text-right font-bold">Q{item.total_q}</TableCell>
                                             </TableRow>

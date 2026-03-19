@@ -16,7 +16,9 @@ import {
     Home,
     History,
     FileSpreadsheet,
-    Activity
+    Activity,
+    ShieldCheck,
+    ListFilter
 } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -53,6 +55,11 @@ const operationsItems = [
         href: '/dashboard/calendar',
         icon: Calendar,
     },
+    {
+        title: 'Búsqueda de Ítems',
+        href: '/dashboard/items',
+        icon: ListFilter,
+    },
 ]
 
 const administrationItems = [
@@ -65,6 +72,16 @@ const administrationItems = [
         title: 'Historial Pagos',
         href: '/dashboard/settlements/history',
         icon: History,
+    },
+    {
+        title: 'Auditoría',
+        href: '/dashboard/audit',
+        icon: ShieldCheck,
+    },
+    {
+        title: 'Configuracion',
+        href: '/dashboard/settings',
+        icon: Settings,
     },
 ]
 

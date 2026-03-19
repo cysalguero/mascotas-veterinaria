@@ -30,7 +30,12 @@ import {
     XCircle,
     CheckCircle,
     ExternalLink,
-    CalendarClock
+    CalendarClock,
+    ChevronLeft,
+    ChevronRight,
+    Banknote,
+    Award,
+    Ban
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -80,6 +85,10 @@ export function InvoiceTable() {
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
     const [categories, setCategories] = useState<Category[]>([])
     const [error, setError] = useState<string | null>(null)
+
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(10)
 
     // Quick View State
     const [quickViewPatients, setQuickViewPatients] = useState<PatientData[]>([])
@@ -172,6 +181,15 @@ export function InvoiceTable() {
         return matchesSearch && matchesCategory && matchesDate
     })
 
+    // Pagination Logic
+    const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / itemsPerPage))
+    const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
+    // Reset page to 1 if filters or itemsPerPage change
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [search, selectedCategory, dateFilterMode, dateRange, itemsPerPage])
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -190,6 +208,51 @@ export function InvoiceTable() {
                 </div>
             )}
 
+            {/* Top Stat Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-[24px] border border-border shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Total General</p>
+                        <p className="text-3xl font-black tracking-tighter text-zinc-900 dark:text-zinc-100">
+                            Q{filteredInvoices.reduce((sum, inv) => sum + (Number(inv.total_q) || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                    </div>
+                    <div className="h-12 w-12 bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center">
+                        <Banknote className="h-6 w-6 text-emerald-600" />
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-[24px] border border-border shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Total Comisionable</p>
+                        <p className="text-3xl font-black tracking-tighter text-indigo-600 dark:text-indigo-400">
+                            Q{filteredInvoices.reduce((sum, inv) => {
+                                const comTotal = inv.invoice_items?.filter(i => i.comisionable).reduce((s, i) => s + Number(i.total_q), 0) || 0
+                                return sum + comTotal
+                            }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                    </div>
+                    <div className="h-12 w-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center">
+                        <Award className="h-6 w-6 text-indigo-600" />
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-950 p-6 rounded-[24px] border border-border shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-1">No Comisionable</p>
+                        <p className="text-3xl font-black tracking-tighter text-orange-600 dark:text-orange-400">
+                            Q{filteredInvoices.reduce((sum, inv) => {
+                                const noComTotal = inv.invoice_items?.filter(i => !i.comisionable).reduce((s, i) => s + Number(i.total_q), 0) || 0
+                                return sum + noComTotal
+                            }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                    </div>
+                    <div className="h-12 w-12 bg-orange-50 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center">
+                        <Ban className="h-6 w-6 text-orange-600" />
+                    </div>
+                </div>
+            </div>
+
             {/* Summary & Filters Bar */}
             <div className="flex flex-col gap-4 bg-white dark:bg-zinc-950 p-6 rounded-xl border border-border shadow-sm">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -203,8 +266,21 @@ export function InvoiceTable() {
                                 className="pl-9 bg-zinc-50/50 border-zinc-200 focus:border-zinc-400 focus:ring-0"
                             />
                         </div>
-                        <div className="hidden md:block">
+                        <div className="hidden flex-col items-start md:flex">
                             <span className="text-xs font-bold text-zinc-400 uppercase">{filteredInvoices.length} Registros</span>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-zinc-500 font-medium">Mostrar</span>
+                                <select
+                                    className="h-6 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-[10px] px-1 focus:ring-0 outline-none"
+                                    value={itemsPerPage}
+                                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={30}>30</option>
+                                    <option value={50}>50</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -302,7 +378,7 @@ export function InvoiceTable() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredInvoices.map((inv) => (
+                            paginatedInvoices.map((inv) => (
                                 <Fragment key={inv.id}>
                                     <TableRow
                                         className={`cursor-pointer transition-colors group ${inv.fecha_contable && (new Date(inv.fecha_venta).getMonth() !== new Date(inv.fecha_contable).getMonth() || new Date(inv.fecha_venta).getFullYear() !== new Date(inv.fecha_contable).getFullYear())
@@ -372,7 +448,7 @@ export function InvoiceTable() {
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-right font-black text-blue-600">
-                                            Q{inv.total_q.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            Q{inv.total_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </TableCell>
                                         <TableCell>
                                             <DropdownMenu>
@@ -484,8 +560,8 @@ export function InvoiceTable() {
                                                                             )}
                                                                         </TableCell>
                                                                         <TableCell className="text-right text-sm font-medium text-zinc-600">{item.cantidad}</TableCell>
-                                                                        <TableCell className="text-right text-sm font-medium text-zinc-600">Q{item.precio_unitario_q.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                                                                        <TableCell className="text-right text-sm font-black text-zinc-900 dark:text-zinc-100">Q{item.total_q.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                                                        <TableCell className="text-right text-sm font-medium text-zinc-600">Q{item.precio_unitario_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                                                        <TableCell className="text-right text-sm font-black text-zinc-900 dark:text-zinc-100">Q{item.total_q.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                                                                     </TableRow>
                                                                 ))}
                                                             </TableBody>
@@ -516,6 +592,36 @@ export function InvoiceTable() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-xs text-zinc-500 font-medium">
+                        Página {currentPage} de {totalPages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="h-8 shadow-sm"
+                        >
+                            <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="h-8 shadow-sm"
+                        >
+                            Siguiente <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* Quick View Modal */}
             <PatientQuickView
                 isOpen={isQuickViewOpen}

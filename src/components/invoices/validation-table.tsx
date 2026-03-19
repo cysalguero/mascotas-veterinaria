@@ -145,7 +145,7 @@ export function ValidationTable() {
                                     />
                                 </TableCell>
                                 <TableCell className="text-right font-bold text-lg">
-                                    Q{invoice.total_q?.toFixed(2) || '0.00'}
+                                    Q{invoice.total_q?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-none">
@@ -188,7 +188,7 @@ export function ValidationTable() {
                                                                     <Input className="h-8 text-right" type="number" defaultValue={item.precio_unitario_q} />
                                                                 </TableCell>
                                                                 <TableCell className="text-right font-medium">
-                                                                    Q{item.total_q?.toFixed(2) || '0.00'}
+                                                                    Q{item.total_q?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                                                                 </TableCell>
                                                                 <TableCell>
                                                                     <select className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">

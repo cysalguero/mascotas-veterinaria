@@ -6,7 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { User, Mail, Shield, ShieldCheck, Save, RefreshCw } from 'lucide-react'
+import { User, Mail, Shield, ShieldCheck, Save, RefreshCw, Calendar, Clock, LockOpen, CheckCircle } from 'lucide-react'
+
+// New Interface for Override Settings
+interface OverrideSettings {
+    active: boolean;
+    allowed_date: string | null;
+    expires_at: string | null;
+}
 
 export default function SettingsPage() {
     const supabase = createClient()
@@ -14,6 +21,12 @@ export default function SettingsPage() {
     const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [fullName, setFullName] = useState('')
+
+    // Admin Settings State
+    const [overrideSettings, setOverrideSettings] = useState<OverrideSettings>({ active: false, allowed_date: null, expires_at: null })
+    const [isSavingAdmin, setIsSavingAdmin] = useState(false)
+    const [adminMessage, setAdminMessage] = useState({ text: '', type: '' })
+    const [selectedDuration, setSelectedDuration] = useState('1') // default 1 hour
 
     useEffect(() => {
         async function loadProfile() {
@@ -65,11 +78,60 @@ export default function SettingsPage() {
                 const finalRole = adminEmails.includes(email.toLowerCase()) ? 'admin' : (role || 'doctor')
 
                 setProfile((prev: any) => ({ ...prev, role: finalRole }))
+
+                // Si es admin, cargar la configuracion
+                if (finalRole === 'admin') {
+                    const { data: settingsData } = await supabase
+                        .from('app_settings')
+                        .select('value')
+                        .eq('key', 'invoice_date_override')
+                        .maybeSingle()
+                    
+                    if (settingsData && settingsData.value) {
+                        setOverrideSettings(settingsData.value as OverrideSettings)
+                    }
+                }
             }
             setIsLoading(false)
         }
         loadProfile()
     }, [])
+
+    const handleSaveAdminSettings = async () => {
+        setIsSavingAdmin(true)
+        setAdminMessage({ text: '', type: '' })
+        try {
+            let expiresAt = null
+            if (overrideSettings.active) {
+                if (!overrideSettings.allowed_date) {
+                    throw new Error('Debes seleccionar una fecha permitida para habilitar el permiso.')
+                }
+                const date = new Date()
+                date.setHours(date.getHours() + parseInt(selectedDuration))
+                expiresAt = date.toISOString()
+            }
+
+            const newValue = {
+                active: overrideSettings.active,
+                allowed_date: overrideSettings.active ? overrideSettings.allowed_date : null,
+                expires_at: overrideSettings.active ? expiresAt : null
+            }
+
+            const { error } = await supabase
+                .from('app_settings')
+                .update({ value: newValue })
+                .eq('key', 'invoice_date_override')
+            
+            if (error) throw error
+
+            setOverrideSettings(newValue)
+            setAdminMessage({ text: 'Configuración guardada exitosamente.', type: 'success' })
+        } catch (error: any) {
+            setAdminMessage({ text: error.message || 'Error al guardar.', type: 'error' })
+        } finally {
+            setIsSavingAdmin(false)
+        }
+    }
 
 
 
@@ -151,6 +213,103 @@ export default function SettingsPage() {
                     </Card>
                 </div>
             </div>
+
+            {/* ADMIN CONFIGURATION SECTION */}
+            {profile?.role === 'admin' && (
+                <div className="mt-12 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                            <LockOpen className="text-purple-600" /> Permisos Especiales
+                        </h2>
+                        <p className="text-zinc-500 font-medium text-sm">Configuración global del sistema. Úsala con precaución.</p>
+                    </div>
+
+                    <Card className="border-2 border-purple-100 dark:border-purple-900/40 shadow-xl bg-white dark:bg-zinc-950 rounded-[32px] overflow-hidden">
+                        <CardHeader className="p-8 border-b border-zinc-100 dark:border-zinc-900 bg-purple-50/50 dark:bg-purple-900/10">
+                            <CardTitle className="text-xl font-black text-purple-900 dark:text-purple-100 flex items-center gap-2">
+                                Ventana de Facturación Excepcional
+                            </CardTitle>
+                            <CardDescription className="text-sm font-medium">
+                                Permite temporalmente a los doctores registrar facturas de una fecha atrasada específica.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-8 space-y-6">
+                            
+                            <div className="flex items-center gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                                <Label className="text-sm font-bold flex-1 cursor-pointer" htmlFor="toggle-override">
+                                    Habilitar permiso temporal
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                                        {overrideSettings.active ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                    <button 
+                                        id="toggle-override"
+                                        onClick={() => setOverrideSettings(prev => ({ ...prev, active: !prev.active }))}
+                                        className={`w-12 h-6 rounded-full transition-colors relative ${overrideSettings.active ? 'bg-purple-600' : 'bg-zinc-300 dark:bg-zinc-700'}`}
+                                    >
+                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${overrideSettings.active ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {overrideSettings.active && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-xl bg-purple-50/30 dark:bg-purple-900/5 border border-purple-100 dark:border-purple-900/20 animate-in fade-in zoom-in-95">
+                                    <div className="space-y-3">
+                                        <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                                            <Calendar className="inline w-3 h-3 mr-1" /> Fecha Permitida
+                                        </Label>
+                                        <Input
+                                            type="date"
+                                            value={overrideSettings.allowed_date || ''}
+                                            onChange={(e) => setOverrideSettings(prev => ({ ...prev, allowed_date: e.target.value }))}
+                                            className="h-12 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                                            <Clock className="inline w-3 h-3 mr-1" /> Horas de Validez
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            max="720"
+                                            value={selectedDuration}
+                                            onChange={(e) => setSelectedDuration(e.target.value)}
+                                            placeholder="Ej: 24"
+                                            className="h-12 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium"
+                                        />
+                                        <p className="text-[10px] text-zinc-400">Indica cuántas horas durará el permiso (ej: 24 = 1 día).</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {overrideSettings.expires_at && overrideSettings.active && (
+                                <div className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 p-3 rounded-lg border border-emerald-100 flex items-center gap-2">
+                                    <CheckCircle size={16} /> 
+                                    Este permiso expira el {new Date(overrideSettings.expires_at).toLocaleString()}
+                                </div>
+                            )}
+
+                            {adminMessage.text && (
+                                <div className={`text-sm p-3 rounded-lg border flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                    {adminMessage.text}
+                                </div>
+                            )}
+
+                            <Button 
+                                onClick={handleSaveAdminSettings}
+                                disabled={isSavingAdmin}
+                                className="w-full md:w-auto h-12 px-8 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold tracking-wide"
+                            >
+                                {isSavingAdmin ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                Guardar cambios
+                            </Button>
+
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     )
 }
