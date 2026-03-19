@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Loader2, CheckCircle, ArrowRight, ArrowLeft, XCircle, Search, User } from 'lucide-react'
+import { Upload, FileText, CheckCircle, ChevronRight, X, AlertTriangle, UserPlus, Info, Plus, Minus, Loader2, ArrowRight, ArrowLeft, XCircle, Search, User } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { searchPatients } from '@/actions/vetesoft'
 import { PatientAvatar } from '@/components/patients/patient-avatar'
@@ -221,10 +221,15 @@ export function InvoiceWizard() {
             }
 
             const data: N8nResponseItem[] = await response.json()
-            // Initialize cantidad_comisionable based on the original comisionable flag
+            // Smart backward-compatible fallback:
+            // 1. If n8n sends "cantidad_comisionable" (new smart system) → use it directly
+            // 2. If n8n sends only "comisionable" boolean (legacy) → convert to quantity
+            // 3. If neither exists → default to full quantity (safe fallback)
             const dataWithComisionableQty = data.map(item => ({
                 ...item,
-                cantidad_comisionable: item.comisionable ? item.cantidad : 0
+                cantidad_comisionable: item.cantidad_comisionable !== undefined 
+                    ? item.cantidad_comisionable 
+                    : (item.comisionable ? item.cantidad : 0)
             }))
 
             setPreviewData(dataWithComisionableQty)
@@ -680,15 +685,33 @@ export function InvoiceWizard() {
                                                 <TableCell className="font-medium text-zinc-700 dark:text-zinc-300">{item.descripcion}</TableCell>
                                                 <TableCell className="text-center font-bold">{item.cantidad}</TableCell>
                                                 <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="icon" 
+                                                            className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200" 
+                                                            disabled={item.cantidad_comisionable === 0}
+                                                            onClick={() => handleCantidadComisionableChange(idx, Math.max(0, (item.cantidad_comisionable || 0) - 1))}
+                                                        >
+                                                            <Minus className="h-3 w-3" />
+                                                        </Button>
                                                         <Input
                                                             type="number"
                                                             min={0}
                                                             max={item.cantidad}
-                                                            value={item.cantidad_comisionable ?? (item.comisionable ? item.cantidad : 0)}
+                                                            value={item.cantidad_comisionable ?? item.cantidad}
                                                             onChange={(e) => handleCantidadComisionableChange(idx, parseInt(e.target.value) || 0)}
-                                                            className="w-16 h-8 text-center"
+                                                            className="w-12 h-8 text-center px-1 font-bold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-blue-500"
                                                         />
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="icon" 
+                                                            className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200" 
+                                                            disabled={item.cantidad_comisionable === item.cantidad}
+                                                            onClick={() => handleCantidadComisionableChange(idx, Math.min(item.cantidad, (item.cantidad_comisionable || 0) + 1))}
+                                                        >
+                                                            <Plus className="h-3 w-3" />
+                                                        </Button>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
