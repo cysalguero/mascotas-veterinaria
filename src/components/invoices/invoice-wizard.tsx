@@ -69,8 +69,9 @@ export function InvoiceWizard() {
     const [userRole, setUserRole] = useState<'admin' | 'doctor' | null>(null)
     const [accountingMonth, setAccountingMonth] = useState<string>('')
     const [accountingYear, setAccountingYear] = useState<string>('')
-    const [dateOverride, setDateOverride] = useState<{ active: boolean, allowed_date: string | null, expires_at: string | null } | null>(null)
-
+    // New Interface for Override Windows array
+    interface OverrideWindow { id: string; allowed_date: string; expires_at: string; }
+    const [dateOverrides, setDateOverrides] = useState<OverrideWindow[]>([])
     // Patient Search State
     const [patientSearchTerm, setPatientSearchTerm] = useState('')
     const [searchTermDebounced, setSearchTermDebounced] = useState('')
@@ -111,7 +112,18 @@ export function InvoiceWizard() {
                 .maybeSingle()
             
             if (settingsData && settingsData.value) {
-                setDateOverride(settingsData.value as any)
+                let windows: OverrideWindow[] = []
+                if (Array.isArray(settingsData.value)) {
+                    windows = settingsData.value
+                } else if (settingsData.value.active && settingsData.value.expires_at) {
+                    windows = [{
+                        id: 'legacy',
+                        allowed_date: settingsData.value.allowed_date,
+                        expires_at: settingsData.value.expires_at
+                    }]
+                }
+                // Guardamos solo las que estan activas a nivel de hora
+                setDateOverrides(windows.filter(w => new Date() < new Date(w.expires_at)))
             }
 
             const { data: catData, error: catError } = await supabase
@@ -303,18 +315,19 @@ export function InvoiceWizard() {
                 }
             } else {
                 // Si es doctor, restringir a HOY o AYER, a menos que haya permiso especial activo
-                const isOverrideValid = dateOverride?.active 
-                    && dateOverride.expires_at 
-                    && new Date() < new Date(dateOverride.expires_at)
-                    && dateOverride.allowed_date === header.fecha_venta_iso;
+                const isOverrideValid = dateOverrides.some(ov => 
+                    new Date() < new Date(ov.expires_at) && 
+                    ov.allowed_date === header.fecha_venta_iso
+                )
 
                 if (!isToday && !isYesterday && !isOverrideValid) {
                     const currentDay = today.getDate()
                     const currentMonth = today.getMonth() + 1
                     const currentYear = today.getFullYear()
                     
-                    if (dateOverride?.active && new Date() < new Date(dateOverride.expires_at!)) {
-                        throw new Error(`⚠️ No se puede guardar. Fecha no válida. Actualmente el administrador ha habilitado subir facturas únicamente para el día: ${dateOverride.allowed_date}.`)
+                    if (dateOverrides.length > 0) {
+                        const allowedDates = dateOverrides.map(ov => ov.allowed_date).join(', ')
+                        throw new Error(`⚠️ No se puede guardar. Fecha no válida. Actualmente el administrador ha habilitado subir facturas extemporáneas únicamente para: ${allowedDates}.`)
                     }
 
                     throw new Error(`⚠️ No se puede guardar. La factura es del ${invDay}/${invMonth}/${invYear} y hoy es ${currentDay}/${currentMonth}/${currentYear}. Tienes hasta 1 día después de la fecha de la factura para registrarla.`)

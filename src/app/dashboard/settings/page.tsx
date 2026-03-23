@@ -6,13 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { User, Mail, Shield, ShieldCheck, Save, RefreshCw, Calendar, Clock, LockOpen, CheckCircle } from 'lucide-react'
+import { User, Mail, Shield, ShieldCheck, Save, RefreshCw, Calendar, Clock, LockOpen, CheckCircle, Trash2, Plus } from 'lucide-react'
 
-// New Interface for Override Settings
-interface OverrideSettings {
-    active: boolean;
-    allowed_date: string | null;
-    expires_at: string | null;
+// Interface for Override Windows array
+interface OverrideWindow {
+    id: string;
+    allowed_date: string;
+    expires_at: string;
 }
 
 export default function SettingsPage() {
@@ -23,7 +23,8 @@ export default function SettingsPage() {
     const [fullName, setFullName] = useState('')
 
     // Admin Settings State
-    const [overrideSettings, setOverrideSettings] = useState<OverrideSettings>({ active: false, allowed_date: null, expires_at: null })
+    const [overrideWindows, setOverrideWindows] = useState<OverrideWindow[]>([])
+    const [newAllowedDate, setNewAllowedDate] = useState('')
     const [isSavingAdmin, setIsSavingAdmin] = useState(false)
     const [adminMessage, setAdminMessage] = useState({ text: '', type: '' })
     const [selectedDuration, setSelectedDuration] = useState('1') // default 1 hour
@@ -88,7 +89,26 @@ export default function SettingsPage() {
                         .maybeSingle()
                     
                     if (settingsData && settingsData.value) {
-                        setOverrideSettings(settingsData.value as OverrideSettings)
+                        let windows: OverrideWindow[] = []
+                        if (Array.isArray(settingsData.value)) {
+                            windows = settingsData.value
+                        } else if (settingsData.value.active && settingsData.value.expires_at) {
+                            // Retrocompatibilidad con la version vieja (objeto simple)
+                            windows = [{
+                                id: crypto.randomUUID(),
+                                allowed_date: settingsData.value.allowed_date,
+                                expires_at: settingsData.value.expires_at
+                            }]
+                        }
+
+                        // SILENT AUTO-CLEANUP: Eliminar ventanas expiradas al cargar la página
+                        const cleanWindows = windows.filter(w => new Date() < new Date(w.expires_at))
+                        setOverrideWindows(cleanWindows)
+
+                        // Si limpiamos algo, guardemos silenciosamente el array limpio en la BD
+                        if (cleanWindows.length !== windows.length) {
+                            supabase.from('app_settings').update({ value: cleanWindows }).eq('key', 'invoice_date_override').then()
+                        }
                     }
                 }
             }
@@ -97,39 +117,60 @@ export default function SettingsPage() {
         loadProfile()
     }, [])
 
-    const handleSaveAdminSettings = async () => {
+    const handleAddWindow = async () => {
         setIsSavingAdmin(true)
         setAdminMessage({ text: '', type: '' })
         try {
-            let expiresAt = null
-            if (overrideSettings.active) {
-                if (!overrideSettings.allowed_date) {
-                    throw new Error('Debes seleccionar una fecha permitida para habilitar el permiso.')
-                }
-                const date = new Date()
-                date.setHours(date.getHours() + parseInt(selectedDuration))
-                expiresAt = date.toISOString()
+            if (!newAllowedDate) {
+                throw new Error('Debes seleccionar una fecha permitida para habilitar el permiso.')
+            }
+            if (overrideWindows.some(w => w.allowed_date === newAllowedDate)) {
+                throw new Error('Esta fecha ya tiene un permiso activo.')
             }
 
-            const newValue = {
-                active: overrideSettings.active,
-                allowed_date: overrideSettings.active ? overrideSettings.allowed_date : null,
-                expires_at: overrideSettings.active ? expiresAt : null
+            const date = new Date()
+            date.setHours(date.getHours() + parseInt(selectedDuration))
+
+            const newWindow: OverrideWindow = {
+                id: crypto.randomUUID(),
+                allowed_date: newAllowedDate,
+                expires_at: date.toISOString()
             }
+
+            const updatedWindows = [...overrideWindows, newWindow]
 
             const { error } = await supabase
                 .from('app_settings')
-                .update({ value: newValue })
+                .update({ value: updatedWindows })
                 .eq('key', 'invoice_date_override')
             
             if (error) throw error
 
-            setOverrideSettings(newValue)
-            setAdminMessage({ text: 'Configuración guardada exitosamente.', type: 'success' })
+            setOverrideWindows(updatedWindows)
+            setNewAllowedDate('')
+            setAdminMessage({ text: 'Permiso temporal añadido exitosamente.', type: 'success' })
         } catch (error: any) {
             setAdminMessage({ text: error.message || 'Error al guardar.', type: 'error' })
         } finally {
             setIsSavingAdmin(false)
+        }
+    }
+
+    const handleDeleteWindow = async (id: string) => {
+        setAdminMessage({ text: '', type: '' })
+        try {
+            const updatedWindows = overrideWindows.filter(w => w.id !== id)
+            const { error } = await supabase
+                .from('app_settings')
+                .update({ value: updatedWindows })
+                .eq('key', 'invoice_date_override')
+            
+            if (error) throw error
+
+            setOverrideWindows(updatedWindows)
+            setAdminMessage({ text: 'Permiso revocado.', type: 'success' })
+        } catch (error: any) {
+            setAdminMessage({ text: error.message || 'Error al eliminar.', type: 'error' })
         }
     }
 
@@ -234,41 +275,23 @@ export default function SettingsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="p-8 space-y-6">
-                            
-                            <div className="flex items-center gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-                                <Label className="text-sm font-bold flex-1 cursor-pointer" htmlFor="toggle-override">
-                                    Habilitar permiso temporal
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                                        {overrideSettings.active ? 'Activo' : 'Inactivo'}
-                                    </span>
-                                    <button 
-                                        id="toggle-override"
-                                        onClick={() => setOverrideSettings(prev => ({ ...prev, active: !prev.active }))}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${overrideSettings.active ? 'bg-purple-600' : 'bg-zinc-300 dark:bg-zinc-700'}`}
-                                    >
-                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${overrideSettings.active ? 'translate-x-6' : 'translate-x-0'}`} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {overrideSettings.active && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-xl bg-purple-50/30 dark:bg-purple-900/5 border border-purple-100 dark:border-purple-900/20 animate-in fade-in zoom-in-95">
-                                    <div className="space-y-3">
+                            <div className="space-y-4">
+                                {/* Formulario para agregar nuevo */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 rounded-xl bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/20">
+                                    <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                                             <Calendar className="inline w-3 h-3 mr-1" /> Fecha Permitida
                                         </Label>
                                         <Input
                                             type="date"
-                                            value={overrideSettings.allowed_date || ''}
-                                            onChange={(e) => setOverrideSettings(prev => ({ ...prev, allowed_date: e.target.value }))}
-                                            className="h-12 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium"
+                                            value={newAllowedDate}
+                                            onChange={(e) => setNewAllowedDate(e.target.value)}
+                                            className="h-10 rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium text-sm"
                                         />
                                     </div>
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                                            <Clock className="inline w-3 h-3 mr-1" /> Horas de Validez
+                                            <Clock className="inline w-3 h-3 mr-1" /> Horas (Validez)
                                         </Label>
                                         <Input
                                             type="number"
@@ -277,34 +300,62 @@ export default function SettingsPage() {
                                             value={selectedDuration}
                                             onChange={(e) => setSelectedDuration(e.target.value)}
                                             placeholder="Ej: 24"
-                                            className="h-12 rounded-xl bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium"
+                                            className="h-10 rounded-lg bg-white dark:bg-zinc-900 border-zinc-200 focus:border-purple-500 font-medium text-sm"
                                         />
-                                        <p className="text-[10px] text-zinc-400">Indica cuántas horas durará el permiso (ej: 24 = 1 día).</p>
+                                    </div>
+                                    <div className="flex items-end">
+                                        <Button 
+                                            onClick={handleAddWindow}
+                                            disabled={isSavingAdmin || !newAllowedDate}
+                                            className="w-full h-10 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                                        >
+                                            {isSavingAdmin ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                                            Añadir permiso
+                                        </Button>
                                     </div>
                                 </div>
-                            )}
 
-                            {overrideSettings.expires_at && overrideSettings.active && (
-                                <div className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 p-3 rounded-lg border border-emerald-100 flex items-center gap-2">
-                                    <CheckCircle size={16} /> 
-                                    Este permiso expira el {new Date(overrideSettings.expires_at).toLocaleString()}
-                                </div>
-                            )}
+                                {/* Lista de ventanas activas */}
+                                {overrideWindows.length > 0 ? (
+                                    <div className="space-y-3 mt-6">
+                                        <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Permisos Activos</Label>
+                                        {overrideWindows.map(window => (
+                                            <div key={window.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                                                        <Calendar size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-black text-sm text-zinc-900 dark:text-zinc-100">{window.allowed_date}</p>
+                                                        <p className="text-xs font-medium text-zinc-500 flex items-center gap-1 mt-0.5">
+                                                            <CheckCircle size={12} className="text-emerald-500" />
+                                                            Expira: {new Date(window.expires_at).toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={() => handleDeleteWindow(window.id)}
+                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-9 px-3"
+                                                >
+                                                    <Trash2 size={16} className="sm:mr-2" />
+                                                    <span className="hidden sm:inline">Revocar</span>
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-8 text-center rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 mt-6">
+                                        <p className="text-zinc-500 text-sm font-medium">No hay ninguna ventana excepcional activa en este momento.</p>
+                                    </div>
+                                )}
 
-                            {adminMessage.text && (
-                                <div className={`text-sm p-3 rounded-lg border flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
-                                    {adminMessage.text}
-                                </div>
-                            )}
-
-                            <Button 
-                                onClick={handleSaveAdminSettings}
-                                disabled={isSavingAdmin}
-                                className="w-full md:w-auto h-12 px-8 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold tracking-wide"
-                            >
-                                {isSavingAdmin ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                Guardar cambios
-                            </Button>
+                                {adminMessage.text && (
+                                    <div className={`mt-4 text-sm p-3 rounded-lg border flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                        {adminMessage.text}
+                                    </div>
+                                )}
+                            </div>
 
                         </CardContent>
                     </Card>
