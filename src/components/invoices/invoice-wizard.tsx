@@ -219,7 +219,7 @@ export function InvoiceWizard() {
                 }
             }
 
-            const response = await fetch('https://vet-n8n.cysolutions.cloud/webhook/recibo-preview', {
+            const response = await fetch('https://mascotas-n8n.c65geq.easypanel.host/webhook/recibo-preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
