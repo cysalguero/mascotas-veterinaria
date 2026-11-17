@@ -25,6 +25,11 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import {
+    GROOMING_RULE_KEY,
+    isItemCommissionableEffective,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
 
 interface Category {
     id: string
@@ -69,9 +74,17 @@ export default function ItemsPage() {
         async function fetchData() {
             setIsLoading(true)
 
-            // 1. Fetch categories
-            const { data: catData } = await supabase.from('categories').select('*')
+            // 1. Fetch categories & grooming rule
+            const [{ data: catData }, { data: groomingRow }] = await Promise.all([
+                supabase.from('categories').select('*'),
+                supabase.from('app_settings').select('value').eq('key', GROOMING_RULE_KEY).maybeSingle()
+            ])
             if (catData) setCategories(catData)
+            const { block_grooming: blockGrooming } = normalizeGroomingRule(groomingRow?.value)
+            const catMap = (catData || []).reduce((acc: Record<string, string>, c: Category) => {
+                acc[c.id] = c.name
+                return acc
+            }, {})
 
             // 2. Fetch profiles
             const { data: profData } = await supabase.from('profiles').select('id, full_name')
@@ -116,7 +129,11 @@ export default function ItemsPage() {
                         total_q: item.total_q,
                         categoria_id: item.categoria_id,
                         invoice_id: item.invoice_id,
-                        comisionable: item.comisionable,
+                        comisionable: isItemCommissionableEffective({
+                            comisionable: item.comisionable,
+                            descripcion: item.descripcion,
+                            categoryName: catMap[item.categoria_id],
+                        }, blockGrooming),
                         ticket_numero: invoice?.ticket_numero || 0,
                         fecha_venta: invoice?.fecha_venta || '',
                         fecha_contable: invoice?.fecha_contable || '',

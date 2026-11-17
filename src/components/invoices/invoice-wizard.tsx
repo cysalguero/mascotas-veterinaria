@@ -10,6 +10,11 @@ import { Upload, FileText, CheckCircle, ChevronRight, X, AlertTriangle, UserPlus
 import { createClient } from '@/utils/supabase/client'
 import { searchPatients } from '@/actions/vetesoft'
 import { PatientAvatar } from '@/components/patients/patient-avatar'
+import {
+    GROOMING_RULE_KEY,
+    isGroomingItem,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
 
 interface N8nResponseItem {
     descripcion: string
@@ -65,6 +70,7 @@ export function InvoiceWizard() {
     const [previewData, setPreviewData] = useState<N8nResponseItem[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [selectedCategories, setSelectedCategories] = useState<Record<number, string>>({})
+    const [blockGrooming, setBlockGrooming] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<'admin' | 'doctor' | null>(null)
     const [accountingMonth, setAccountingMonth] = useState<string>('')
@@ -104,12 +110,21 @@ export function InvoiceWizard() {
                 setUserRole((role as 'admin' | 'doctor') || 'doctor')
             }
 
-            // Fetch Date Override Settings
-            const { data: settingsData } = await supabase
-                .from('app_settings')
-                .select('value')
-                .eq('key', 'invoice_date_override')
-                .maybeSingle()
+            // Fetch Date Override Settings & Grooming Rule
+            const [{ data: settingsData }, { data: groomingRow }] = await Promise.all([
+                supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('key', 'invoice_date_override')
+                    .maybeSingle(),
+                supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('key', GROOMING_RULE_KEY)
+                    .maybeSingle()
+            ])
+
+            setBlockGrooming(normalizeGroomingRule(groomingRow?.value).block_grooming)
             
             if (settingsData && settingsData.value) {
                 let windows: OverrideWindow[] = []
@@ -237,12 +252,19 @@ export function InvoiceWizard() {
             // 1. If n8n sends "cantidad_comisionable" (new smart system) → use it directly
             // 2. If n8n sends only "comisionable" boolean (legacy) → convert to quantity
             // 3. If neither exists → default to full quantity (safe fallback)
-            const dataWithComisionableQty = data.map(item => ({
-                ...item,
-                cantidad_comisionable: item.cantidad_comisionable !== undefined 
-                    ? item.cantidad_comisionable 
-                    : (item.comisionable ? item.cantidad : 0)
-            }))
+            const dataWithComisionableQty = data.map(item => {
+                const blocked = blockGrooming && isGroomingItem({ descripcion: item.descripcion })
+                const initialQty = blocked
+                    ? 0
+                    : item.cantidad_comisionable !== undefined
+                        ? item.cantidad_comisionable
+                        : (item.comisionable ? item.cantidad : 0)
+                return {
+                    ...item,
+                    comisionable: blocked ? false : initialQty > 0,
+                    cantidad_comisionable: initialQty
+                }
+            })
 
             setPreviewData(dataWithComisionableQty)
             setSelectedCategories({})
@@ -254,16 +276,31 @@ export function InvoiceWizard() {
         }
     }
 
+    const isWizardItemBlockedByGrooming = (item: N8nResponseItem, categoryId?: string) => {
+        if (!blockGrooming) return false
+        const categoryName = categories.find(c => c.id === categoryId)?.name
+        return isGroomingItem({ descripcion: item.descripcion, categoryName })
+    }
+
     const handleCategoryChange = (index: number, categoryId: string) => {
         setSelectedCategories(prev => ({
             ...prev,
             [index]: categoryId
+        }))
+        setPreviewData(prev => prev.map((item, i) => {
+            if (i === index && isWizardItemBlockedByGrooming(item, categoryId)) {
+                return { ...item, cantidad_comisionable: 0, comisionable: false }
+            }
+            return item
         }))
     }
 
     const handleCantidadComisionableChange = (index: number, value: number) => {
         setPreviewData(prev => prev.map((item, i) => {
             if (i === index) {
+                if (isWizardItemBlockedByGrooming(item, selectedCategories[index])) {
+                    return { ...item, cantidad_comisionable: 0, comisionable: false }
+                }
                 // Ensure value is between 0 and total cantidad
                 const validValue = Math.max(0, Math.min(item.cantidad, value))
                 return { ...item, cantidad_comisionable: validValue, comisionable: validValue > 0 }
@@ -382,7 +419,10 @@ export function InvoiceWizard() {
                     categoria_id: selectedCategories[idx] || null
                 }
 
-                const comisionableQty = typeof item.cantidad_comisionable === 'number' ? item.cantidad_comisionable : (item.comisionable ? item.cantidad : 0)
+                const blockedByGrooming = isWizardItemBlockedByGrooming(item, selectedCategories[idx])
+                const comisionableQty = blockedByGrooming
+                    ? 0
+                    : (typeof item.cantidad_comisionable === 'number' ? item.cantidad_comisionable : (item.comisionable ? item.cantidad : 0))
                 const nonComisionableQty = item.cantidad - comisionableQty
 
                 // Si hay cantidad comisionable, creamos esa fila
@@ -693,38 +733,46 @@ export function InvoiceWizard() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {previewData.map((item, idx) => (
+                                        {previewData.map((item, idx) => {
+                                            const groomingBlocked = isWizardItemBlockedByGrooming(item, selectedCategories[idx])
+                                            return (
                                             <TableRow key={idx} className="hover:bg-zinc-50/50 transition-colors">
                                                 <TableCell className="font-medium text-zinc-700 dark:text-zinc-300">{item.descripcion}</TableCell>
                                                 <TableCell className="text-center font-bold">{item.cantidad}</TableCell>
                                                 <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center gap-1.5">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="icon" 
-                                                            className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200" 
-                                                            disabled={item.cantidad_comisionable === 0}
-                                                            onClick={() => handleCantidadComisionableChange(idx, Math.max(0, (item.cantidad_comisionable || 0) - 1))}
-                                                        >
-                                                            <Minus className="h-3 w-3" />
-                                                        </Button>
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            max={item.cantidad}
-                                                            value={item.cantidad_comisionable ?? item.cantidad}
-                                                            onChange={(e) => handleCantidadComisionableChange(idx, parseInt(e.target.value) || 0)}
-                                                            className="w-12 h-8 text-center px-1 font-bold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-blue-500"
-                                                        />
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="icon" 
-                                                            className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200" 
-                                                            disabled={item.cantidad_comisionable === item.cantidad}
-                                                            onClick={() => handleCantidadComisionableChange(idx, Math.min(item.cantidad, (item.cantidad_comisionable || 0) + 1))}
-                                                        >
-                                                            <Plus className="h-3 w-3" />
-                                                        </Button>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            <Button 
+                                                                variant="outline" 
+                                                                size="icon" 
+                                                                className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200" 
+                                                                disabled={groomingBlocked || item.cantidad_comisionable === 0}
+                                                                onClick={() => handleCantidadComisionableChange(idx, Math.max(0, (item.cantidad_comisionable || 0) - 1))}
+                                                            >
+                                                                <Minus className="h-3 w-3" />
+                                                            </Button>
+                                                            <Input
+                                                                type="number"
+                                                                min={0}
+                                                                max={item.cantidad}
+                                                                disabled={groomingBlocked}
+                                                                value={groomingBlocked ? 0 : (item.cantidad_comisionable ?? item.cantidad)}
+                                                                onChange={(e) => handleCantidadComisionableChange(idx, parseInt(e.target.value) || 0)}
+                                                                className="w-12 h-8 text-center px-1 font-bold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-blue-500 disabled:opacity-50"
+                                                            />
+                                                            <Button 
+                                                                variant="outline" 
+                                                                size="icon" 
+                                                                className="h-6 w-6 rounded-full border-zinc-300 dark:border-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200" 
+                                                                disabled={groomingBlocked || item.cantidad_comisionable === item.cantidad}
+                                                                onClick={() => handleCantidadComisionableChange(idx, Math.min(item.cantidad, (item.cantidad_comisionable || 0) + 1))}
+                                                            >
+                                                                <Plus className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                        {groomingBlocked && (
+                                                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">No comisionable (Grooming)</span>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -742,7 +790,8 @@ export function InvoiceWizard() {
                                                 <TableCell className="text-right">Q{item.precio_unitario_q}</TableCell>
                                                 <TableCell className="text-right font-bold">Q{item.total_q}</TableCell>
                                             </TableRow>
-                                        ))}
+                                            )
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>

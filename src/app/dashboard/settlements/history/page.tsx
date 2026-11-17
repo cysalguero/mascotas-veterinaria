@@ -23,7 +23,8 @@ import {
     Lock,
     Trash2,
     MoreHorizontal,
-    Trophy
+    Trophy,
+    Printer
 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -38,7 +39,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { round2 } from '@/lib/settlements'
+import { printSettlementSummary, round2 } from '@/lib/settlements'
 
 interface Settlement {
     id: string
@@ -54,6 +55,7 @@ interface Settlement {
     dias_trabajados?: number
     total_dias_mes?: number
     tipo_cambio?: number
+    ingresos_comisionables_q?: number
     comision_quetzales: number
     alcanzo_meta?: boolean
     bono_meta_usd?: number
@@ -365,6 +367,45 @@ export default function SettlementsHistoryPage() {
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                                                 <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    onClick={() => {
+                                                        const commissionQ = round2(s.comision_quetzales || 0)
+                                                        const commissionableQ = round2(
+                                                            s.ingresos_comisionables_q !== undefined && s.ingresos_comisionables_q !== null
+                                                                ? Number(s.ingresos_comisionables_q)
+                                                                : commissionQ / 0.05
+                                                        )
+                                                        const bonusMultipliers = s.alcanzo_meta ? Math.max(1, Math.round(bonusUsd / 100)) : 0
+                                                        printSettlementSummary({
+                                                            doctorName: 'Dra. Natalia Reyes Useche',
+                                                            monthName: MONTHS[s.mes],
+                                                            year: s.anio,
+                                                            statusLabel: s.estado || 'Completado',
+                                                            paymentMethod: s.metodo_pago || 'Efectivo',
+                                                            daysWorked: s.dias_trabajados || s.total_dias_mes || 30,
+                                                            totalDaysInMonth: s.total_dias_mes || 30,
+                                                            baseSalaryUsd: s.sueldo_base_usd,
+                                                            exchangeRate,
+                                                            commissionableIncomeQ: commissionableQ,
+                                                            calc: {
+                                                                proratedSalaryUsd: round2(salaryUsdForCalc),
+                                                                proratedSalaryQ: salaryQ,
+                                                                commissionQ,
+                                                                commissionUsd: exchangeRate > 0 ? round2(commissionQ / exchangeRate) : 0,
+                                                                bonusMultipliers,
+                                                                hasReachedGoal: Boolean(s.alcanzo_meta),
+                                                                metaBonusUsd: round2(bonusUsd),
+                                                                metaBonusQ: bonusQ,
+                                                                foodQ,
+                                                                transportQ,
+                                                                totalQuetzales: round2(s.total_quetzales),
+                                                                totalUsd: round2(s.total_usd),
+                                                            },
+                                                        })
+                                                    }}
+                                                >
+                                                    <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     onClick={() => deleteSettlement(s.id)}
                                                     className="text-red-600 focus:text-red-600 focus:bg-red-50"

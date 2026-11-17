@@ -7,8 +7,14 @@ import {
     calculateSettlementTotals,
     getAllowancesForMonth,
     normalizeAllowancesConfig,
+    printSettlementSummary,
     SETTLEMENT_ALLOWANCES_KEY,
 } from '@/lib/settlements'
+import {
+    GROOMING_RULE_KEY,
+    isItemCommissionableEffective,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
 import {
     format,
     startOfMonth,
@@ -37,7 +43,8 @@ import {
     ChevronRight,
     Utensils,
     Car,
-    Settings
+    Settings,
+    Printer
 } from 'lucide-react'
 import {
     Card,
@@ -185,17 +192,36 @@ export default function SettlementsPage() {
             const start = startOfMonth(currentDate)
             const end = endOfMonth(currentDate)
 
-            // Buscamos todas las ventas comisionables del mes
-            const { data, error } = await supabase
-                .from('invoice_items')
-                .select('total_q, invoices!inner(fecha_contable)')
-                .eq('comisionable', true)
-                .gte('invoices.fecha_contable', format(start, 'yyyy-MM-dd'))
-                .lte('invoices.fecha_contable', format(end, 'yyyy-MM-dd'))
+            // Buscamos todas las ventas comisionables del mes y la regla vigente de Grooming
+            const [{ data, error }, { data: groomingRow }] = await Promise.all([
+                supabase
+                    .from('invoice_items')
+                    .select('total_q, descripcion, comisionable, categories(name), invoices!inner(fecha_contable)')
+                    .eq('comisionable', true)
+                    .gte('invoices.fecha_contable', format(start, 'yyyy-MM-dd'))
+                    .lte('invoices.fecha_contable', format(end, 'yyyy-MM-dd')),
+                supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('key', GROOMING_RULE_KEY)
+                    .maybeSingle()
+            ])
 
             if (error) throw error
 
-            const total = data.reduce((acc, item) => acc + (item.total_q || 0), 0)
+            const { block_grooming: blockGrooming } = normalizeGroomingRule(groomingRow?.value)
+            const total = (data || []).reduce((acc, item) => {
+                const rawCat = item.categories as { name?: string } | { name?: string }[] | null
+                const categoryName = Array.isArray(rawCat) ? rawCat[0]?.name : rawCat?.name
+                if (!isItemCommissionableEffective({
+                    comisionable: item.comisionable,
+                    descripcion: item.descripcion,
+                    categoryName,
+                }, blockGrooming)) {
+                    return acc
+                }
+                return acc + (item.total_q || 0)
+            }, 0)
             setCommissionableIncome(total)
         } catch (error) {
             console.error('Error fetching commission data:', error)
@@ -283,6 +309,22 @@ export default function SettlementsPage() {
         totalQuetzales: totalToPayQuetzales,
         totalUsd: totalToPayUsd,
     } = calc
+
+    const handlePrintSummary = () => {
+        printSettlementSummary({
+            doctorName: DOCTOR_NAME,
+            monthName: MONTHS[currentDate.getMonth()],
+            year: currentDate.getFullYear(),
+            statusLabel: hasExisting ? 'Registrado' : 'Pendiente (Vista Previa)',
+            paymentMethod,
+            daysWorked: daysWorkedNum,
+            totalDaysInMonth,
+            baseSalaryUsd,
+            exchangeRate,
+            commissionableIncomeQ: commissionableIncome,
+            calc,
+        })
+    }
 
     if (isCheckingRole) {
         return (
@@ -376,8 +418,19 @@ export default function SettlementsPage() {
                         size="icon"
                         onClick={fetchCommissionableData}
                         className="rounded-full h-9 w-9 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50"
+                        title="Actualizar datos"
                     >
                         <RefreshCw className={`h-4 w-4 ${isLoading || isSaving ? 'animate-spin' : ''}`} />
+                    </Button>
+
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePrintSummary}
+                        className="rounded-full h-9 px-4 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 font-bold text-xs"
+                    >
+                        <Printer className="h-3.5 w-3.5 mr-1.5" />
+                        Imprimir / PDF
                     </Button>
                 </div>
             </div>
@@ -635,7 +688,7 @@ export default function SettlementsPage() {
                                 {isLocked ? (
                                     <Button
                                         onClick={() => setIsLocked(false)}
-                                        className="w-full h-16 rounded-[24px] text-lg font-black shadow-xl transition-all bg-zinc-900 hover:bg-black dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                        className="w-full sm:flex-1 h-16 rounded-[24px] text-lg font-black shadow-xl transition-all bg-zinc-900 hover:bg-black dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                                     >
                                         <Edit3 className="mr-3 h-5 w-5" />
                                         Habilitar Edición
@@ -644,7 +697,7 @@ export default function SettlementsPage() {
                                     <Button
                                         onClick={handleSaveSettlement}
                                         disabled={isSaving}
-                                        className={`w-full h-16 rounded-[24px] text-lg font-black shadow-xl transition-all ${isSuccess
+                                        className={`w-full sm:flex-1 h-16 rounded-[24px] text-lg font-black shadow-xl transition-all ${isSuccess
                                             ? 'bg-green-600 hover:bg-green-700'
                                             : 'bg-zinc-900 hover:bg-black dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200'
                                             }`}
@@ -659,9 +712,14 @@ export default function SettlementsPage() {
                                         {isSaving ? 'Guardando...' : isSuccess ? '¡Registrado!' : hasExisting ? 'Actualizar Registro' : 'Registrar Cierre Mensual'}
                                     </Button>
                                 )}
-                                <Button variant="outline" className="w-full h-16 rounded-[24px] border-zinc-200 dark:border-zinc-800 text-lg font-black hover:bg-zinc-50 transition-all">
-                                    <FileSpreadsheet className="mr-3 h-5 w-5" />
-                                    Exportar Resumen
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handlePrintSummary}
+                                    className="w-full sm:flex-1 h-16 rounded-[24px] border-2 border-zinc-300 dark:border-zinc-700 text-lg font-black hover:bg-zinc-100 transition-all"
+                                >
+                                    <Printer className="mr-3 h-5 w-5" />
+                                    Imprimir / PDF
                                 </Button>
                             </div>
                         </CardContent>

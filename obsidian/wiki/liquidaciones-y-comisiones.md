@@ -1,5 +1,5 @@
 ---
-archivos: [src/app/dashboard/settlements/, src/app/dashboard/payments/, src/app/dashboard/pending-invoices/, src/app/dashboard/settings/page.tsx, src/lib/settlements.ts, src/components/invoices/]
+archivos: [src/app/dashboard/settlements/, src/app/dashboard/payments/, src/app/dashboard/pending-invoices/, src/app/dashboard/settings/page.tsx, src/lib/settlements.ts, src/lib/commissions.ts, src/components/invoices/]
 actualizado: 2026-11-17
 ---
 
@@ -25,13 +25,19 @@ liquida esas comisiones en el cierre mensual.
 - **`/dashboard/settings` (pestaña "Cierre Mensual")**: permite editar los montos base por
   defecto y ajustes por mes específico (`app_settings` clave `settlement_allowances`); si el
   mes ya tenía cierre en `settlements`, recalcula automáticamente su registro.
-- **`src/lib/settlements.ts`**: helper único de cálculo (`calculateSettlementTotals`, `round2`)
-  y resolución de viáticos por mes (`getAllowancesForMonth`), garantizando que la suma de los
-  conceptos en quetzales coincida exactamente con `total_quetzales`.
+- **`src/lib/settlements.ts`**: helper único de cálculo (`calculateSettlementTotals`, `round2`),
+  resolución de viáticos por mes (`getAllowancesForMonth`) y generación de comprobante PDF
+  imprimible vía iframe oculto (`buildSettlementPrintHtml`, `printSettlementSummary`), usado
+  tanto por **Cierre Mensual** (`Imprimir / PDF`) como por **Historial Pagos**.
 - **`/dashboard/payments`**: análisis de pagos y métricas.
+- **`src/lib/commissions.ts`**: regla configurable (`grooming_commission_rule` en
+  `app_settings`, botón Sí/No en **Configuración → Configuración de Comisiones**) que impide
+  comisionar ítems de categoría `Grooming` o servicios con descripción `grooming` (respetando
+  ventas físicas bajo `Venta de producto`), aplicada en Nueva Venta, Webhook SIGES, Búsqueda
+  de Ítems, Historial de Ventas, Métricas y Cierre Mensual.
 - SQL relevante: `UPDATE_SETTLEMENT_SCHEMA.sql`, `FIX_SETTLEMENTS_COLUMNS.sql`,
   `FIX_SETTLEMENTS_PERMISSIONS.sql`, `CHECK_SETTLEMENTS_DB.sql`,
-  `ADD_ALLOWANCES_TO_SETTLEMENTS.sql`.
+  `ADD_ALLOWANCES_TO_SETTLEMENTS.sql`, `ADD_GROOMING_RULE.sql`.
 
 ## Reglas / trampas
 

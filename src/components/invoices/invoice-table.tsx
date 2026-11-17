@@ -3,6 +3,11 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import {
+    GROOMING_RULE_KEY,
+    isItemCommissionableEffective,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
+import {
     Table,
     TableBody,
     TableCell,
@@ -84,6 +89,7 @@ export function InvoiceTable() {
     const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' })
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
     const [categories, setCategories] = useState<Category[]>([])
+    const [blockGrooming, setBlockGrooming] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
 
     // Pagination State
@@ -107,8 +113,21 @@ export function InvoiceTable() {
     }, [])
 
     const fetchCategories = async () => {
-        const { data: catData } = await supabase.from('categories').select('id, name').order('name')
+        const [{ data: catData }, { data: groomingRow }] = await Promise.all([
+            supabase.from('categories').select('id, name').order('name'),
+            supabase.from('app_settings').select('value').eq('key', GROOMING_RULE_KEY).maybeSingle()
+        ])
         if (catData) setCategories(catData)
+        setBlockGrooming(normalizeGroomingRule(groomingRow?.value).block_grooming)
+    }
+
+    const isEffectiveComisionable = (item: InvoiceItem) => {
+        const categoryName = categories.find(c => c.id === item.categoria_id)?.name
+        return isItemCommissionableEffective({
+            comisionable: item.comisionable,
+            descripcion: item.descripcion,
+            categoryName,
+        }, blockGrooming)
     }
 
     const fetchInvoices = async () => {
@@ -227,7 +246,7 @@ export function InvoiceTable() {
                         <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">Total Comisionable</p>
                         <p className="text-3xl font-black tracking-tighter text-indigo-600 dark:text-indigo-400">
                             Q{filteredInvoices.reduce((sum, inv) => {
-                                const comTotal = inv.invoice_items?.filter(i => i.comisionable).reduce((s, i) => s + Number(i.total_q), 0) || 0
+                                const comTotal = inv.invoice_items?.filter(i => isEffectiveComisionable(i)).reduce((s, i) => s + Number(i.total_q), 0) || 0
                                 return sum + comTotal
                             }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
@@ -242,7 +261,7 @@ export function InvoiceTable() {
                         <p className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-1">No Comisionable</p>
                         <p className="text-3xl font-black tracking-tighter text-orange-600 dark:text-orange-400">
                             Q{filteredInvoices.reduce((sum, inv) => {
-                                const noComTotal = inv.invoice_items?.filter(i => !i.comisionable).reduce((s, i) => s + Number(i.total_q), 0) || 0
+                                const noComTotal = inv.invoice_items?.filter(i => !isEffectiveComisionable(i)).reduce((s, i) => s + Number(i.total_q), 0) || 0
                                 return sum + noComTotal
                             }, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
@@ -553,7 +572,7 @@ export function InvoiceTable() {
                                                                             </span>
                                                                         </TableCell>
                                                                         <TableCell className="text-center">
-                                                                            {item.comisionable ? (
+                                                                            {isEffectiveComisionable(item) ? (
                                                                                 <CheckCircle className="h-4 w-4 text-green-500 mx-auto" strokeWidth={3} />
                                                                             ) : (
                                                                                 <XCircle className="h-4 w-4 text-red-500 mx-auto opacity-20" />

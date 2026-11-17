@@ -25,7 +25,13 @@ import {
     Utensils,
     Car,
     Wallet,
+    Scissors,
+    Ban,
 } from 'lucide-react'
+import {
+    GROOMING_RULE_KEY,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
 import {
     ALLOWANCES_START_YEAR,
     calculateSettlementTotals,
@@ -87,6 +93,9 @@ export default function SettingsPage() {
     const [existingMonthSettlement, setExistingMonthSettlement] = useState<{ id: string } | null>(null)
     const [isSavingAllowances, setIsSavingAllowances] = useState(false)
     const [allowancesMessage, setAllowancesMessage] = useState({ text: '', type: '' })
+    const [blockGroomingCommissions, setBlockGroomingCommissions] = useState<boolean>(true)
+    const [isSavingGroomingRule, setIsSavingGroomingRule] = useState(false)
+    const [groomingRuleMessage, setGroomingRuleMessage] = useState({ text: '', type: '' })
 
     useEffect(() => {
         async function loadProfile() {
@@ -169,8 +178,8 @@ export default function SettingsPage() {
                         }
                     }
 
-                    // Cargar configuración de SIGES y viáticos de Cierre Mensual
-                    const [{ data: sigesData }, { data: allowancesRow }] = await Promise.all([
+                    // Cargar configuración de SIGES, viáticos de Cierre Mensual y regla de Grooming
+                    const [{ data: sigesData }, { data: allowancesRow }, { data: groomingRow }] = await Promise.all([
                         supabase
                             .from('app_settings')
                             .select('key, value')
@@ -179,6 +188,11 @@ export default function SettingsPage() {
                             .from('app_settings')
                             .select('value')
                             .eq('key', SETTLEMENT_ALLOWANCES_KEY)
+                            .maybeSingle(),
+                        supabase
+                            .from('app_settings')
+                            .select('value')
+                            .eq('key', GROOMING_RULE_KEY)
                             .maybeSingle()
                     ])
 
@@ -195,8 +209,11 @@ export default function SettingsPage() {
                     setDefaultFoodQ(normalizedAllowances.defaults.comida_q)
                     setDefaultTransportQ(normalizedAllowances.defaults.transporte_q)
 
+                    const normalizedGrooming = normalizeGroomingRule(groomingRow?.value)
+                    setBlockGroomingCommissions(normalizedGrooming.block_grooming)
+
                     const tabParam = new URLSearchParams(window.location.search).get('tab')
-                    if (tabParam === 'settlements' || tabParam === 'admin' || tabParam === 'profile') {
+                    if (tabParam === 'settlements' || tabParam === 'commissions' || tabParam === 'admin' || tabParam === 'profile') {
                         setActiveTab(tabParam)
                     }
                 }
@@ -481,6 +498,47 @@ export default function SettingsPage() {
         }
     }
 
+    const handleToggleGroomingRule = async (nextBlock: boolean) => {
+        setIsSavingGroomingRule(true)
+        setGroomingRuleMessage({ text: '', type: '' })
+        try {
+            const payload = { block_grooming: nextBlock }
+            const { data: existing } = await supabase
+                .from('app_settings')
+                .select('id')
+                .eq('key', GROOMING_RULE_KEY)
+                .maybeSingle()
+
+            if (existing) {
+                const { error } = await supabase
+                    .from('app_settings')
+                    .update({ value: payload })
+                    .eq('key', GROOMING_RULE_KEY)
+                if (error) throw error
+            } else {
+                const { error } = await supabase
+                    .from('app_settings')
+                    .insert([{ key: GROOMING_RULE_KEY, value: payload }])
+                if (error) throw error
+            }
+
+            setBlockGroomingCommissions(nextBlock)
+            setGroomingRuleMessage({
+                text: nextBlock
+                    ? 'Regla activada: ningún servicio de Grooming genera comisión.'
+                    : 'Regla desactivada: los ítems de Grooming siguen el valor de su factura.',
+                type: 'success',
+            })
+        } catch (error: unknown) {
+            const msg = error && typeof error === 'object' && 'message' in error
+                ? String((error as { message: unknown }).message)
+                : 'Error al guardar regla de Grooming.'
+            setGroomingRuleMessage({ text: msg, type: 'error' })
+        } finally {
+            setIsSavingGroomingRule(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center py-24 space-y-4">
@@ -506,6 +564,9 @@ export default function SettingsPage() {
                         <>
                             <TabsTrigger value="settlements" className="rounded-xl px-4 py-2.5 text-sm font-bold">
                                 <Wallet className="w-4 h-4 mr-2" /> Cierre Mensual
+                            </TabsTrigger>
+                            <TabsTrigger value="commissions" className="rounded-xl px-4 py-2.5 text-sm font-bold">
+                                <Scissors className="w-4 h-4 mr-2" /> Configuración de Comisiones
                             </TabsTrigger>
                             <TabsTrigger value="admin" className="rounded-xl px-4 py-2.5 text-sm font-bold">
                                 <LockOpen className="w-4 h-4 mr-2" /> Permisos y SIGES
@@ -578,6 +639,80 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </TabsContent>
+
+                {profile?.role === 'admin' && (
+                    <TabsContent value="commissions" className="mt-0 space-y-6">
+                        <Card className="border-2 border-amber-200 dark:border-amber-900/40 shadow-xl bg-white dark:bg-zinc-950 rounded-[32px] overflow-hidden">
+                            <CardHeader className="p-8 border-b border-zinc-100 dark:border-zinc-900 bg-amber-50/60 dark:bg-amber-900/10">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <CardTitle className="text-xl font-black text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                                            <Scissors className="text-amber-600" /> Regla de Comisiones: Grooming
+                                        </CardTitle>
+                                        <CardDescription className="text-sm font-medium mt-1">
+                                            Controla si los servicios o categoría de <strong>Grooming</strong> deben quedar bloqueados como no comisionables en todo el sistema.
+                                        </CardDescription>
+                                    </div>
+                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest self-start sm:self-center ${
+                                        blockGroomingCommissions
+                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                            : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                                    }`}>
+                                        {blockGroomingCommissions ? (
+                                            <><Ban size={13} /> Activa: Ninguno comisiona</>
+                                        ) : (
+                                            <>Inactiva: Según factura</>
+                                        )}
+                                    </span>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-8 space-y-5">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                                    <div>
+                                        <p className="font-black text-sm text-zinc-900 dark:text-zinc-100">
+                                            ¿Bloquear comisiones en todo Grooming?
+                                        </p>
+                                        <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                                            Aplica a Nueva Venta, Webhook SIGES, Búsqueda de Ítems, Métricas y Cierre Mensual (respeta productos físicos como gabachas en Venta de producto).
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Button
+                                            type="button"
+                                            disabled={isSavingGroomingRule}
+                                            onClick={() => handleToggleGroomingRule(true)}
+                                            className={`h-10 px-5 rounded-xl font-black text-xs uppercase tracking-wider ${
+                                                blockGroomingCommissions
+                                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md'
+                                                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-300'
+                                            }`}
+                                        >
+                                            Sí (Bloquear)
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            disabled={isSavingGroomingRule}
+                                            onClick={() => handleToggleGroomingRule(false)}
+                                            className={`h-10 px-5 rounded-xl font-black text-xs uppercase tracking-wider ${
+                                                !blockGroomingCommissions
+                                                    ? 'bg-zinc-900 hover:bg-black text-white shadow-md dark:bg-white dark:text-zinc-900'
+                                                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-300'
+                                            }`}
+                                        >
+                                            No
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {groomingRuleMessage.text && (
+                                    <div className={`text-sm p-3 rounded-lg border flex items-center gap-2 ${groomingRuleMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                                        {groomingRuleMessage.text}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                )}
 
                 {profile?.role === 'admin' && (
                     <TabsContent value="settlements" className="mt-0 space-y-6">

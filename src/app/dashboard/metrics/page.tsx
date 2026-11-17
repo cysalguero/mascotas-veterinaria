@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import {
+    GROOMING_RULE_KEY,
+    isItemCommissionableEffective,
+    normalizeGroomingRule,
+} from '@/lib/commissions'
+import {
     format,
     startOfMonth,
     endOfMonth,
@@ -141,8 +146,16 @@ export default function MetricsPage() {
                 query = query.eq('doctor_id', user.id)
             }
 
-            const { data: invoices, error: invError } = await query
+            const [{ data: invoices, error: invError }, { data: groomingRow }] = await Promise.all([
+                query,
+                supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('key', GROOMING_RULE_KEY)
+                    .maybeSingle()
+            ])
             if (invError) throw invError
+            const { block_grooming: blockGrooming } = normalizeGroomingRule(groomingRow?.value)
 
             let totalIncome = 0 // Comisionable
             let totalGrossIncome = 0 // Total facturado (con o sin comisión)
@@ -170,7 +183,12 @@ export default function MetricsPage() {
                     // Sumamos SIEMPRE al gross income
                     totalGrossIncome += itemTotal
 
-                    if (item.comisionable) {
+                    const catName = item.categories?.name || 'General'
+                    if (isItemCommissionableEffective({
+                        comisionable: item.comisionable,
+                        descripcion: item.descripcion,
+                        categoryName: catName,
+                    }, blockGrooming)) {
                         invoiceCommissionableTotal += itemTotal
                         totalIncome += itemTotal
 
@@ -181,7 +199,6 @@ export default function MetricsPage() {
                         }
 
                         // Categories follow commissionable income
-                        const catName = item.categories?.name || 'General'
                         categoryMap[catName] = (categoryMap[catName] || 0) + itemTotal
 
                         // Top Products follow commissionable income
@@ -227,7 +244,7 @@ export default function MetricsPage() {
 
             let prevQuery = supabase
                 .from('invoices')
-                .select('invoice_items(total_q, comisionable)')
+                .select('invoice_items(total_q, comisionable, descripcion, categories(name))')
                 .gte('fecha_contable', format(prevStart, 'yyyy-MM-dd'))
                 .lte('fecha_contable', format(prevEnd, 'yyyy-MM-dd'))
 
@@ -239,7 +256,14 @@ export default function MetricsPage() {
             let prevMonthIncome = 0
             prevInvoices?.forEach(inv => {
                 inv.invoice_items?.forEach((item: any) => {
-                    if (item.comisionable) prevMonthIncome += item.total_q || 0
+                    const catName = item.categories?.name || 'General'
+                    if (isItemCommissionableEffective({
+                        comisionable: item.comisionable,
+                        descripcion: item.descripcion,
+                        categoryName: catName,
+                    }, blockGrooming)) {
+                        prevMonthIncome += item.total_q || 0
+                    }
                 })
             })
 
