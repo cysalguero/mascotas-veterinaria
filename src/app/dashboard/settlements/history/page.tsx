@@ -38,6 +38,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { round2 } from '@/lib/settlements'
 
 interface Settlement {
     id: string
@@ -49,9 +50,15 @@ interface Settlement {
     created_at: string
     metodo_pago: string
     sueldo_base_usd: number
+    sueldo_proporcional_usd?: number
+    dias_trabajados?: number
+    total_dias_mes?: number
+    tipo_cambio?: number
     comision_quetzales: number
     alcanzo_meta?: boolean
     bono_meta_usd?: number
+    comida_mes_siguiente_q?: number
+    auxilio_transporte_q?: number
 }
 
 const MONTHS = [
@@ -215,7 +222,7 @@ export default function SettlementsHistoryPage() {
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Liquidado (Q)</p>
                             <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
-                                Q {settlements.reduce((acc, s) => acc + s.total_quetzales, 0).toLocaleString('en-US')}
+                                Q {settlements.reduce((acc, s) => acc + (s.total_quetzales || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
                         </div>
                     </CardContent>
@@ -228,7 +235,7 @@ export default function SettlementsHistoryPage() {
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Comisiones (Q)</p>
                             <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
-                                Q {settlements.reduce((acc, s) => acc + s.comision_quetzales, 0).toLocaleString('en-US')}
+                                Q {settlements.reduce((acc, s) => acc + (s.comision_quetzales || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
                         </div>
                     </CardContent>
@@ -257,6 +264,8 @@ export default function SettlementsHistoryPage() {
                             <TableHead className="font-black text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-[0.2em]">Sueldo Base (USD)</TableHead>
                             <TableHead className="font-black text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-[0.2em]">Comisiones (Q)</TableHead>
                             <TableHead className="font-black text-amber-600 uppercase text-[10px] tracking-[0.2em]">Meta (Bono)</TableHead>
+                            <TableHead className="font-black text-amber-700 dark:text-amber-400 uppercase text-[10px] tracking-[0.2em]">Comida (Q)</TableHead>
+                            <TableHead className="font-black text-cyan-700 dark:text-cyan-400 uppercase text-[10px] tracking-[0.2em]">Transporte (Q)</TableHead>
                             <TableHead className="font-black text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-[0.2em]">Total Final</TableHead>
                             <TableHead className="font-black text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-[0.2em]">Método</TableHead>
                             <TableHead className="font-black text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-[0.2em]">Estado</TableHead>
@@ -266,7 +275,7 @@ export default function SettlementsHistoryPage() {
                     <TableBody>
                         {filteredSettlements.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-48 text-center">
+                                <TableCell colSpan={10} className="h-48 text-center">
                                     <div className="flex flex-col items-center justify-center text-zinc-500 gap-2">
                                         <ArrowUpRight size={32} className="opacity-20" />
                                         <p className="font-medium">No se encontraron liquidaciones registradas.</p>
@@ -274,7 +283,16 @@ export default function SettlementsHistoryPage() {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredSettlements.map((s) => (
+                            filteredSettlements.map((s) => {
+                                const exchangeRate = s.tipo_cambio || 7.5
+                                const salaryUsdForCalc = s.sueldo_proporcional_usd ?? s.sueldo_base_usd
+                                const salaryQ = round2(salaryUsdForCalc * exchangeRate)
+                                const bonusUsd = s.alcanzo_meta ? (s.bono_meta_usd ?? 100) : 0
+                                const bonusQ = round2(bonusUsd * exchangeRate)
+                                const foodQ = round2(Number(s.comida_mes_siguiente_q ?? 0))
+                                const transportQ = round2(Number(s.auxilio_transporte_q ?? 0))
+
+                                return (
                                 <TableRow key={s.id} className="h-20 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors border-zinc-100 dark:border-zinc-900">
                                     <TableCell className="pl-8">
                                         <div className="flex flex-col">
@@ -289,28 +307,42 @@ export default function SettlementsHistoryPage() {
                                             <span className="text-xs font-bold text-zinc-400">{s.anio}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-black text-zinc-600 dark:text-zinc-400">
-                                        $ {s.sueldo_base_usd.toLocaleString()}
+                                    <TableCell>
+                                        <div className="flex flex-col">
+                                            <span className="font-black text-zinc-600 dark:text-zinc-400">
+                                                $ {s.sueldo_base_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                            <span className="text-[11px] font-bold text-zinc-400">
+                                                Q {salaryQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                {s.dias_trabajados && s.total_dias_mes && s.dias_trabajados < s.total_dias_mes
+                                                    ? ` (${s.dias_trabajados}d)`
+                                                    : ''}
+                                            </span>
+                                        </div>
                                     </TableCell>
                                     <TableCell className="font-black text-blue-600">
-                                        Q {s.comision_quetzales.toLocaleString()}
+                                        Q {s.comision_quetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </TableCell>
                                     <TableCell>
                                         {s.alcanzo_meta ? (
                                             <div className="flex flex-col">
-                                                <span className="font-black text-amber-600">$ {s.bono_meta_usd ? s.bono_meta_usd.toFixed(2) : '100.00'}</span>
-                                                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter">Meta Lograda</span>
+                                                <span className="font-black text-amber-600">$ {bonusUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                <span className="text-[11px] font-bold text-zinc-400">Q {bonusQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                             </div>
                                         ) : (
-                                            <span className="text-zinc-300 font-bold">$ 0.00</span>
+                                            <span className="text-zinc-300 font-bold">Q 0.00</span>
                                         )}
+                                    </TableCell>
+                                    <TableCell className="font-black text-amber-700 dark:text-amber-400">
+                                        Q {foodQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </TableCell>
+                                    <TableCell className="font-black text-cyan-700 dark:text-cyan-400">
+                                        Q {transportQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-black text-zinc-900 dark:text-zinc-100">$ {s.total_usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-xs font-bold text-blue-500">Q {s.total_quetzales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                            </div>
+                                            <span className="font-black text-zinc-900 dark:text-zinc-100">Q {s.total_quetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            <span className="text-xs font-bold text-blue-500">Ref. $ {s.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -343,7 +375,8 @@ export default function SettlementsHistoryPage() {
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                            ))
+                                )
+                            })
                         )}
                     </TableBody>
                 </Table>

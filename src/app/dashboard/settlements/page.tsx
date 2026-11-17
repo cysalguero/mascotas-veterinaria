@@ -1,7 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
+import {
+    calculateSettlementTotals,
+    getAllowancesForMonth,
+    normalizeAllowancesConfig,
+    SETTLEMENT_ALLOWANCES_KEY,
+} from '@/lib/settlements'
 import {
     format,
     startOfMonth,
@@ -27,7 +34,10 @@ import {
     Lock,
     Trophy,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Utensils,
+    Car,
+    Settings
 } from 'lucide-react'
 import {
     Card,
@@ -65,6 +75,8 @@ export default function SettlementsPage() {
     const [totalDaysInMonth, setTotalDaysInMonth] = useState(30)
     const [baseSalaryUsd, setBaseSalaryUsd] = useState(500)
     const [exchangeRate, setExchangeRate] = useState(7.5)
+    const [foodAllowanceQ, setFoodAllowanceQ] = useState(750)
+    const [transportAllowanceQ, setTransportAllowanceQ] = useState(250)
     const [paymentMethod, setPaymentMethod] = useState('Efectivo')
 
     const supabase = createClient()
@@ -117,23 +129,48 @@ export default function SettlementsPage() {
 
     async function checkExistingSettlement() {
         try {
-            const { data } = await supabase
-                .from('settlements')
-                .select('*')
-                .eq('mes', currentDate.getMonth())
-                .eq('anio', currentDate.getFullYear())
-                .maybeSingle()
+            const monthIndex = currentDate.getMonth()
+            const yearNum = currentDate.getFullYear()
+
+            const [{ data }, { data: settingsRow }] = await Promise.all([
+                supabase
+                    .from('settlements')
+                    .select('*')
+                    .eq('mes', monthIndex)
+                    .eq('anio', yearNum)
+                    .maybeSingle(),
+                supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('key', SETTLEMENT_ALLOWANCES_KEY)
+                    .maybeSingle()
+            ])
+
+            const allowancesConfig = normalizeAllowancesConfig(settingsRow?.value)
+            const configuredForMonth = getAllowancesForMonth(allowancesConfig, yearNum, monthIndex)
 
             if (data) {
                 setWorkDays(data.dias_trabajados)
                 setBaseSalaryUsd(data.sueldo_base_usd)
                 setExchangeRate(data.tipo_cambio)
                 setPaymentMethod(data.metodo_pago || 'Transferencia')
+                setFoodAllowanceQ(
+                    data.comida_mes_siguiente_q !== undefined && data.comida_mes_siguiente_q !== null
+                        ? Number(data.comida_mes_siguiente_q)
+                        : configuredForMonth.comida_q
+                )
+                setTransportAllowanceQ(
+                    data.auxilio_transporte_q !== undefined && data.auxilio_transporte_q !== null
+                        ? Number(data.auxilio_transporte_q)
+                        : configuredForMonth.transporte_q
+                )
                 setIsLocked(true)
                 setHasExisting(true)
             } else {
                 const end = endOfMonth(currentDate)
                 setWorkDays(parseInt(format(end, 'd')))
+                setFoodAllowanceQ(configuredForMonth.comida_q)
+                setTransportAllowanceQ(configuredForMonth.transporte_q)
                 setIsLocked(false)
                 setHasExisting(false)
             }
@@ -186,14 +223,16 @@ export default function SettlementsPage() {
                 dias_trabajados: daysWorkedNum,
                 total_dias_mes: totalDaysInMonth,
                 sueldo_base_usd: baseSalaryUsd,
-                sueldo_proporcional_usd: proratedSalaryUsd,
+                sueldo_proporcional_usd: calc.proratedSalaryUsd,
                 ingresos_comisionables_q: commissionableIncome,
-                comision_quetzales: commissionQuetzales,
+                comision_quetzales: calc.commissionQ,
                 tipo_cambio: exchangeRate,
-                total_usd: totalToPayUsd,
-                total_quetzales: totalToPayQuetzales,
-                alcanzo_meta: hasReachedGoal,
-                bono_meta_usd: metaBonusUsd,
+                comida_mes_siguiente_q: calc.foodQ,
+                auxilio_transporte_q: calc.transportQ,
+                total_usd: calc.totalUsd,
+                total_quetzales: calc.totalQuetzales,
+                alcanzo_meta: calc.hasReachedGoal,
+                bono_meta_usd: calc.metaBonusUsd,
                 estado: 'Completado',
                 metodo_pago: paymentMethod
             }
@@ -221,21 +260,29 @@ export default function SettlementsPage() {
     }
 
     const daysWorkedNum = typeof workDays === 'string' ? (parseInt(workDays) || 0) : workDays
-    const proratedSalaryUsd = (baseSalaryUsd / totalDaysInMonth) * daysWorkedNum
-    const commissionQuetzales = commissionableIncome * 0.05
-    const commissionUsd = commissionQuetzales / exchangeRate
-
-    // --- LÓGICA DE META MENSUAL (Iterativa: $100 por cada Q30k) ---
-    // Antes: const hasReachedGoal = commissionableIncome >= 30000
-    // Antes: const metaBonusUsd = hasReachedGoal ? 100 : 0
-
-    const bonusMultipliers = Math.floor(commissionableIncome / 30000)
-    const hasReachedGoal = bonusMultipliers > 0
-    const metaBonusUsd = bonusMultipliers * 100
-    // --------------------------------------------------
-
-    const totalToPayUsd = proratedSalaryUsd + commissionUsd + metaBonusUsd
-    const totalToPayQuetzales = (totalToPayUsd * exchangeRate)
+    const calc = calculateSettlementTotals({
+        baseSalaryUsd,
+        daysWorked: daysWorkedNum,
+        totalDaysInMonth,
+        commissionableIncomeQ: commissionableIncome,
+        exchangeRate,
+        foodAllowanceQ,
+        transportAllowanceQ,
+    })
+    const {
+        proratedSalaryUsd,
+        proratedSalaryQ,
+        commissionQ: commissionQuetzales,
+        commissionUsd,
+        bonusMultipliers,
+        hasReachedGoal,
+        metaBonusUsd,
+        metaBonusQ,
+        foodQ,
+        transportQ,
+        totalQuetzales: totalToPayQuetzales,
+        totalUsd: totalToPayUsd,
+    } = calc
 
     if (isCheckingRole) {
         return (
@@ -386,6 +433,36 @@ export default function SettlementsPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Comida Mes Siguiente (Q)</Label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-400">Q</span>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={foodAllowanceQ}
+                                            disabled={isLocked}
+                                            onChange={(e) => setFoodAllowanceQ(parseFloat(e.target.value) || 0)}
+                                            className="h-12 pl-9 rounded-2xl font-black text-lg border-zinc-100 bg-zinc-50 focus-visible:ring-blue-500 disabled:opacity-50"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Auxilio de Transporte (Q)</Label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-zinc-400">Q</span>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={transportAllowanceQ}
+                                            disabled={isLocked}
+                                            onChange={(e) => setTransportAllowanceQ(parseFloat(e.target.value) || 0)}
+                                            className="h-12 pl-9 rounded-2xl font-black text-lg border-zinc-100 bg-zinc-50 focus-visible:ring-blue-500 disabled:opacity-50"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
                                     <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Método de Pago</Label>
                                     <div className="relative">
                                         <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
@@ -403,14 +480,21 @@ export default function SettlementsPage() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                            <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900 space-y-2">
                                 <p className="text-[11px] font-medium text-zinc-500 italic">
                                     {isLocked ? (
                                         <span className="text-zinc-900 dark:text-zinc-100 font-bold">Registro bloqueado. Haz clic en Editar para modificar.</span>
                                     ) : (
-                                        "* El cálculo del sueldo base es proporcional."
+                                        "* Comida y transporte se liquidan completos en quetzales (sin prorrateo)."
                                     )}
                                 </p>
+                                <Link
+                                    href="/dashboard/settings?tab=settlements"
+                                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                                >
+                                    <Settings size={12} />
+                                    Editar montos por mes en Configuración
+                                </Link>
                             </div>
                         </CardContent>
                     </Card>
@@ -454,13 +538,17 @@ export default function SettlementsPage() {
                                             <Briefcase className="text-zinc-500" size={18} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Sueldo Base Proporcional</p>
-                                            <p className="text-xs font-bold text-zinc-400">Ajustado a {daysWorkedNum} días</p>
+                                            <p className="text-sm font-black text-zinc-900 dark:text-zinc-50 uppercase tracking-tighter">Sueldo Base</p>
+                                            <p className="text-xs font-bold text-zinc-400">
+                                                {daysWorkedNum === totalDaysInMonth
+                                                    ? `Mes completo (${daysWorkedNum} días)`
+                                                    : `Ajustado a ${daysWorkedNum} de ${totalDaysInMonth} días`}
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-xl font-black text-zinc-900 dark:text-zinc-100">$ {proratedSalaryUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs font-bold text-zinc-400">Q {(proratedSalaryUsd * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xl font-black text-zinc-900 dark:text-zinc-100">Q {proratedSalaryQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xs font-bold text-zinc-400">$ {proratedSalaryUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between p-6 bg-zinc-50 dark:bg-zinc-900 rounded-3xl group transition-all hover:bg-zinc-100/50">
@@ -474,8 +562,8 @@ export default function SettlementsPage() {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-xl font-black text-blue-700 dark:text-blue-400">$ {commissionUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs font-bold text-zinc-400">Q {commissionQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xl font-black text-blue-700 dark:text-blue-400">Q {commissionQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xs font-bold text-zinc-400">$ {commissionUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
 
@@ -491,8 +579,42 @@ export default function SettlementsPage() {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-xl font-black text-green-700 dark:text-green-400">+$ {metaBonusUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                            <p className="text-xs font-bold text-green-600/50">Q {(metaBonusUsd * exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                            <p className="text-xl font-black text-green-700 dark:text-green-400">+Q {metaBonusQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                            <p className="text-xs font-bold text-green-600/50">+$ {metaBonusUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {foodQ > 0 && (
+                                    <div className="flex items-center justify-between p-6 bg-amber-50/70 dark:bg-amber-900/15 rounded-3xl border border-amber-100 dark:border-amber-900/30">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-10 w-10 bg-white dark:bg-amber-900/40 rounded-2xl flex items-center justify-center shadow-sm">
+                                                <Utensils className="text-amber-600 dark:text-amber-400" size={18} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-amber-800 dark:text-amber-300 uppercase tracking-tighter">Comida Mes Siguiente</p>
+                                                <p className="text-xs font-bold text-amber-600/80">Monto completo en quetzales</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xl font-black text-amber-800 dark:text-amber-300">+Q {foodQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {transportQ > 0 && (
+                                    <div className="flex items-center justify-between p-6 bg-cyan-50/70 dark:bg-cyan-900/15 rounded-3xl border border-cyan-100 dark:border-cyan-900/30">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-10 w-10 bg-white dark:bg-cyan-900/40 rounded-2xl flex items-center justify-center shadow-sm">
+                                                <Car className="text-cyan-600 dark:text-cyan-400" size={18} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-cyan-800 dark:text-cyan-300 uppercase tracking-tighter">Auxilio de Transporte</p>
+                                                <p className="text-xs font-bold text-cyan-600/80">Mes siguiente • Monto completo en quetzales</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xl font-black text-cyan-800 dark:text-cyan-300">+Q {transportQ.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                         </div>
                                     </div>
                                 )}
@@ -501,11 +623,11 @@ export default function SettlementsPage() {
                             <div className="bg-zinc-900 dark:bg-white rounded-[32px] p-10 text-white dark:text-zinc-900 flex flex-col items-center justify-center gap-2 shadow-2xl shadow-blue-500/20">
                                 <p className="text-xs font-black uppercase tracking-[0.3em] opacity-60">Total Neto a Liquidar</p>
                                 <h4 className="text-6xl font-black tracking-tighter italic">
-                                    $ {totalToPayUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    Q {totalToPayQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </h4>
                                 <div className="h-px w-24 bg-white/20 dark:bg-zinc-200 my-2" />
-                                <p className="text-2xl font-black text-blue-400 dark:text-blue-600">
-                                    Q {totalToPayQuetzales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                <p className="text-xl font-bold text-blue-400 dark:text-blue-600">
+                                    Ref. $ {totalToPayUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                             </div>
 

@@ -23,6 +23,7 @@
 
 ## Hecho
 
+- [x] 2026-11-17 — Agregar comida del mes siguiente (Q750) y auxilio de transporte (Q250) a Cierre Mensual, Historial de Pagos y pestaña en Configuración, desde enero 2026 (Gemini)
 - [x] 2026-11-14 — Migrar webhook n8n (`recibo-preview`) a `mascotas-n8n.c65geq.easypanel.host` por expiración de `cysolutions.cloud` (Gemini)
 - [x] 2026-07-13 — Bootstrap del vault LLM Wiki Brújula (Claude)
 
